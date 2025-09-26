@@ -147,7 +147,7 @@ const AppSidebar = () => {
             <GraduationCap className="h-8 w-8 text-sidebar-primary" />
             {!isCollapsed && (
               <div>
-                <h2 className="text-lg font-semibold text-sidebar-foreground">GradGate</h2>
+                <h2 className="text-lg font-semibold text-sidebar-foreground">Quality Educacional</h2>
                 <p className="text-sm text-sidebar-foreground/70">
                   {profile?.full_name || 'Carregando...'}
                 </p>

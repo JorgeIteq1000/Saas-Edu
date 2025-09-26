@@ -11,13 +11,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CourseTypesManagement from '@/components/courses/CourseTypesManagement';
 import CertifyingInstitutionsManagement from '@/components/courses/CertifyingInstitutionsManagement';
+import NewCourseModal from './NewCourseModal';
 
+// Interface ajustada para refletir os dados aninhados
 interface Course {
   id: string;
   name: string;
   code: string;
   description: string;
-  course_type: string;
   modality: string;
   duration_months: number;
   workload_hours: number;
@@ -25,6 +26,10 @@ interface Course {
   monthly_fee: number;
   active: boolean;
   created_at: string;
+  // Tipos para os dados relacionados (joins)
+  course_types: {
+    name: string;
+  } | null;
 }
 
 const CoursesPage = () => {
@@ -35,23 +40,20 @@ const CoursesPage = () => {
   const { hasPermission } = usePermissions();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (hasPermission('courses', 'view')) {
-      fetchCourses();
-    } else {
-      setLoading(false);
-    }
-  }, [hasPermission]);
-
   const fetchCourses = async () => {
+    setLoading(true);
     try {
+      // Consulta corrigida para buscar os nomes das tabelas relacionadas
       const { data, error } = await supabase
         .from('courses')
-        .select('*')
+        .select(`
+          *,
+          course_types (name)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCourses(data || []);
+      setCourses(data as Course[] || []);
     } catch (error) {
       console.error('Erro ao buscar cursos:', error);
       toast({
@@ -63,6 +65,16 @@ const CoursesPage = () => {
       setLoading(false);
     }
   };
+
+  // Removido o fetchCourses do array de dependência para evitar o loop
+  useEffect(() => {
+    if (hasPermission('courses', 'view')) {
+      fetchCourses();
+    } else {
+      setLoading(false);
+    }
+  }, [hasPermission]);
+
 
   const filteredCourses = courses.filter(course =>
     course.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -153,17 +165,12 @@ const CoursesPage = () => {
                         <TableCell>{course.code}</TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {course.course_type === 'graduacao' ? 'Graduação' :
-                             course.course_type === 'pos_graduacao' ? 'Pós-Graduação' :
-                             course.course_type === 'mestrado' ? 'Mestrado' :
-                             course.course_type === 'doutorado' ? 'Doutorado' :
-                             course.course_type === 'tecnico' ? 'Técnico' : 'Livre'}
+                            {course.course_types?.name || 'N/A'}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {course.modality === 'presencial' ? 'Presencial' :
-                             course.modality === 'ead' ? 'EAD' : 'Híbrido'}
+                            {course.modality.toUpperCase()}
                           </Badge>
                         </TableCell>
                         <TableCell>{course.duration_months} meses</TableCell>
@@ -205,6 +212,12 @@ const CoursesPage = () => {
           <CertifyingInstitutionsManagement />
         </TabsContent>
       </Tabs>
+
+      <NewCourseModal
+        open={showNewModal}
+        onOpenChange={setShowNewModal}
+        onCourseCreated={fetchCourses}
+      />
     </div>
   );
 };

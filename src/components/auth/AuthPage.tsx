@@ -94,7 +94,7 @@ const AuthPage = () => {
           <div className="flex items-center justify-center mb-4">
             <GraduationCap className="h-12 w-12 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">GradGate</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Quality Educacional</h1>
           <p className="text-white/80">Sistema de Gestão Acadêmica</p>
           
           <div className="mt-6 p-4 bg-white/10 rounded-lg backdrop-blur-sm">

@@ -204,9 +204,10 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {/* CORREÇÃO APLICADA AQUI */}
                 <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="aprovada">Aprovada</SelectItem>
-                <SelectItem value="matriculado">Matriculado</SelectItem>
+                <SelectItem value="ativa">Ativa/Matriculado</SelectItem>
+                <SelectItem value="trancada">Trancada</SelectItem>
                 <SelectItem value="cancelada">Cancelada</SelectItem>
                 <SelectItem value="concluida">Concluída</SelectItem>
               </SelectContent>
@@ -226,7 +227,7 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
                 <SelectItem value="pendente">Pendente</SelectItem>
                 <SelectItem value="pago">Pago</SelectItem>
                 <SelectItem value="cancelado">Cancelado</SelectItem>
-                <SelectItem value="em_atraso">Em Atraso</SelectItem>
+                <SelectItem value="vencido">Vencido</SelectItem> {/* Corrigido de em_atraso para vencido */}
               </SelectContent>
             </Select>
           </div>

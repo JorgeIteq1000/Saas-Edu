@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react'; // Importar useCallback
 import { supabase } from '@/integrations/supabase/client';
 
 export interface UserPermissions {
@@ -87,7 +87,8 @@ export const usePermissions = () => {
     fetchPermissions();
   }, []);
 
-  const hasPermission = (module: string, action: 'view' | 'create' | 'edit' | 'delete') => {
+  // Envolver a função hasPermission com useCallback para estabilizar sua referência
+  const hasPermission = useCallback((module: string, action: 'view' | 'create' | 'edit' | 'delete') => {
     const modulePermissions = permissions[module];
     if (!modulePermissions) return false;
     
@@ -103,7 +104,7 @@ export const usePermissions = () => {
       default:
         return false;
     }
-  };
+  }, [permissions]); // A dependência agora é o objeto de permissões
 
   return {
     permissions,

@@ -8,6 +8,7 @@ import { Plus, Search, FileText, Edit, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import NewContractModal from '@/components/contracts/NewContractModal'; // Importar o novo modal
 
 interface Contract {
   id: string;
@@ -15,10 +16,10 @@ interface Contract {
   version: string;
   active: boolean;
   created_at: string;
-  course_type: {
+  course_types: { // Corrigido para corresponder à consulta
     name: string;
   };
-  certifying_institution: {
+  certifying_institutions: { // Corrigido para corresponder à consulta
     name: string;
   };
 }
@@ -27,30 +28,24 @@ const ContractsPage = () => {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showNewModal, setShowNewModal] = useState(false); // Estado para controlar o modal
   const { hasPermission } = usePermissions();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (hasPermission('contracts', 'view')) {
-      fetchContracts();
-    } else {
-      setLoading(false);
-    }
-  }, [hasPermission]);
-
   const fetchContracts = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('contracts')
         .select(`
           *,
-          course_type:course_types(name),
-          certifying_institution:certifying_institutions(name)
+          course_types (name),
+          certifying_institutions (name)
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setContracts(data || []);
+      setContracts(data as any[] || []);
     } catch (error) {
       console.error('Erro ao buscar contratos:', error);
       toast({
@@ -62,11 +57,19 @@ const ContractsPage = () => {
       setLoading(false);
     }
   };
+  
+  useEffect(() => {
+    if (hasPermission('contracts', 'view')) {
+      fetchContracts();
+    } else {
+      setLoading(false);
+    }
+  }, [hasPermission]);
 
   const filteredContracts = contracts.filter(contract =>
     contract.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contract.course_type?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contract.certifying_institution?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    contract.course_types?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    contract.certifying_institutions?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (!hasPermission('contracts', 'view')) {
@@ -93,7 +96,8 @@ const ContractsPage = () => {
           <p className="text-muted-foreground">Gerencie os contratos dos cursos</p>
         </div>
         {hasPermission('contracts', 'create') && (
-          <Button>
+          // Botão agora abre o modal
+          <Button onClick={() => setShowNewModal(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Contrato
           </Button>
@@ -140,8 +144,8 @@ const ContractsPage = () => {
                     <TableCell className="font-medium">
                       {contract.name}
                     </TableCell>
-                    <TableCell>{contract.course_type?.name}</TableCell>
-                    <TableCell>{contract.certifying_institution?.name}</TableCell>
+                    <TableCell>{contract.course_types?.name}</TableCell>
+                    <TableCell>{contract.certifying_institutions?.name}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{contract.version}</Badge>
                     </TableCell>
@@ -172,6 +176,13 @@ const ContractsPage = () => {
           )}
         </CardContent>
       </Card>
+      
+      {/* Adicionar o componente do modal aqui */}
+      <NewContractModal
+        open={showNewModal}
+        onOpenChange={setShowNewModal}
+        onContractCreated={fetchContracts}
+      />
     </div>
   );
 };

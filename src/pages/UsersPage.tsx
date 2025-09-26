@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Users, Plus, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import UserModal from '@/components/users/UserModal'; // Importar o novo modal
 
 interface Profile {
   id: string;
@@ -23,18 +24,13 @@ const UsersPage = () => {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const { hasPermission } = usePermissions();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (hasPermission('users', 'view')) {
-      fetchUsers();
-    } else {
-      setLoading(false);
-    }
-  }, [hasPermission]);
-
   const fetchUsers = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -53,6 +49,25 @@ const UsersPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  useEffect(() => {
+    if (hasPermission('users', 'view')) {
+      fetchUsers();
+    } else {
+      setLoading(false);
+    }
+  }, [hasPermission]);
+
+
+  const handleNewUser = () => {
+    setSelectedUser(null);
+    setShowModal(true);
+  };
+
+  const handleEditUser = (user: Profile) => {
+    setSelectedUser(user);
+    setShowModal(true);
   };
 
   const getRoleLabel = (role: string) => {
@@ -106,7 +121,7 @@ const UsersPage = () => {
           <p className="text-muted-foreground">Gerencie os usuários do sistema</p>
         </div>
         {hasPermission('users', 'create') && (
-          <Button>
+          <Button onClick={handleNewUser}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Usuário
           </Button>
@@ -166,7 +181,7 @@ const UsersPage = () => {
                     </TableCell>
                     {hasPermission('users', 'edit') && (
                       <TableCell>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleEditUser(user)}>
                           Editar
                         </Button>
                       </TableCell>
@@ -178,6 +193,13 @@ const UsersPage = () => {
           )}
         </CardContent>
       </Card>
+      
+      <UserModal 
+        open={showModal}
+        onOpenChange={setShowModal}
+        onUserSaved={fetchUsers}
+        user={selectedUser}
+      />
     </div>
   );
 };

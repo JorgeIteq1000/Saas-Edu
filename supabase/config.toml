@@ -19,8 +19,7 @@ pool_mode = "transaction"
 
 [realtime]
 enabled = true
-port = 54324
-tenant_id = "realtime-dev"
+# As chaves 'port' e 'tenant_id' foram removidas daqui
 
 [studio]
 enabled = true
@@ -35,17 +34,16 @@ pop3_port = 54327
 
 [storage]
 enabled = true
-port = 54328
 file_size_limit = "50MiB"
+# A chave 'port' foi removida daqui
 
 [auth]
 enabled = true
-port = 54329
 site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = ["https://127.0.0.1:3000"]
 jwt_expiry = 3600
 enable_signup = true
-enable_email_confirmations = false
+# As chaves 'enable_email_confirmations' e 'port' foram removidas daqui
 
 [auth.email]
 enable_signup = true

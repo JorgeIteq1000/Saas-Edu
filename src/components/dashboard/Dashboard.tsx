@@ -4,11 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import CreateTestUsersButton from '@/components/admin/CreateTestUsersButton';
-import { 
-  BookOpen, 
-  Users, 
-  TrendingUp, 
-  DollarSign, 
+import AnnouncementsModal from '@/components/dashboard/AnnouncementsModal'; // Importação do novo componente
+import {
+  BookOpen,
+  Users,
+  TrendingUp,
+  DollarSign,
   GraduationCap,
   UserPlus,
   FileText,
@@ -276,47 +277,51 @@ const Dashboard = () => {
   );
 
   const renderStudentDashboard = () => (
-    <div className="grid gap-6 md:grid-cols-2">
-      <Card className="shadow-soft">
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <GraduationCap className="mr-2 h-5 w-5 text-primary" />
-            Minhas Matrículas
-          </CardTitle>
-          <CardDescription>
-            Acompanhe seus cursos e progresso
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold mb-2">{stats.totalEnrollments}</div>
-          <p className="text-sm text-muted-foreground">
-            {stats.totalEnrollments === 0 ? 'Nenhuma matrícula encontrada' : 'Cursos ativos'}
-          </p>
-        </CardContent>
-      </Card>
+    <>
+      {/* Adiciona o modal de avisos aqui, ele cuidará da própria lógica de exibição */}
+      <AnnouncementsModal />
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="shadow-soft">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <GraduationCap className="mr-2 h-5 w-5 text-primary" />
+              Minhas Matrículas
+            </CardTitle>
+            <CardDescription>
+              Acompanhe seus cursos e progresso
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold mb-2">{stats.totalEnrollments}</div>
+            <p className="text-sm text-muted-foreground">
+              {stats.totalEnrollments === 0 ? 'Nenhuma matrícula encontrada' : 'Cursos ativos'}
+            </p>
+          </CardContent>
+        </Card>
 
-      <Card className="shadow-soft">
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <FileText className="mr-2 h-5 w-5 text-accent" />
-            Portal do Aluno
-          </CardTitle>
-          <CardDescription>
-            Acesse seus documentos e serviços
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button className="w-full justify-start" variant="outline">
-            <FileText className="mr-2 h-4 w-4" />
-            Meus Documentos
-          </Button>
-          <Button className="w-full justify-start" variant="outline">
-            <Calendar className="mr-2 h-4 w-4" />
-            Abrir Protocolo
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+        <Card className="shadow-soft">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <FileText className="mr-2 h-5 w-5 text-accent" />
+              Portal do Aluno
+            </CardTitle>
+            <CardDescription>
+              Acesse seus documentos e serviços
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button className="w-full justify-start" variant="outline">
+              <FileText className="mr-2 h-4 w-4" />
+              Meus Documentos
+            </Button>
+            <Button className="w-full justify-start" variant="outline">
+              <Calendar className="mr-2 h-4 w-4" />
+              Abrir Protocolo
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 
   const renderGenericDashboard = () => (
@@ -363,7 +368,7 @@ const Dashboard = () => {
             Olá, {profile?.full_name || 'Usuário'}! 👋
           </h1>
           <p className="text-muted-foreground">
-            Bem-vindo ao painel de controle do GradGate
+            Bem-vindo ao painel de controle do Quality Educacional
           </p>
         </div>
         <CreateTestUsersButton userRole={profile?.role} />
