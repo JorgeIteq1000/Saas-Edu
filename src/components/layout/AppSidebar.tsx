@@ -26,6 +26,7 @@ import {
   DollarSign,
   BarChart3,
   Megaphone,
+  User // CORREÇÃO: Adicionado o ícone 'User'
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -122,7 +123,8 @@ const AppSidebar = () => {
         { title: 'Minhas Matrículas', url: '/my-enrollments', icon: BookOpen },
         { title: 'Meus Protocolos', url: '/my-protocols', icon: FileText },
         { title: 'Meus Certificados', url: '/my-certificates', icon: GraduationCap },
-        { title: 'Documentos', url: '/my-documents', icon: FileText }
+        { title: 'Documentos', url: '/my-documents', icon: FileText },
+        { title: 'Meus Dados', url: '/my-data', icon: User } // CORREÇÃO: Usando o ícone 'User' importado
       );
     }
 
@@ -130,9 +132,7 @@ const AppSidebar = () => {
   };
 
   const menuItems = getMenuItems();
-  const currentPath = location.pathname;
 
-  const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "hover:bg-sidebar-accent/50";
 
@@ -147,7 +147,7 @@ const AppSidebar = () => {
             <GraduationCap className="h-8 w-8 text-sidebar-primary" />
             {!isCollapsed && (
               <div>
-                <h2 className="text-lg font-semibold text-sidebar-foreground">Quality Educacional</h2>
+                <h2 className="text-lg font-semibold text-sidebar-foreground">GradGate</h2>
                 <p className="text-sm text-sidebar-foreground/70">
                   {profile?.full_name || 'Carregando...'}
                 </p>

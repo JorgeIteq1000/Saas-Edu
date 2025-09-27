@@ -1,44 +1,47 @@
-import { useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { Session, User } from '@supabase/supabase-js';
 import AppSidebar from './AppSidebar';
 import AuthPage from '@/components/auth/AuthPage';
-import { Session, User } from '@supabase/supabase-js';
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
 interface AppLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-const AppLayout = ({ children }: AppLayoutProps) => {
-  console.log('AppLayout: Componente renderizado');
-  const [user, setUser] = useState<User | null>(null);
+const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
-  console.log('AppLayout: Estados atuais - loading:', loading, 'user:', !!user, 'session:', !!session);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    console.log('AppLayout: Iniciando autenticação...');
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('AppLayout: Auth state change:', event, !!session);
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+    // log: Lógica de autenticação aprimorada
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+      
+      // Se o usuário fez login (especialmente via link mágico que adiciona um # na URL)
+      // e estamos na página raiz, navegamos para a raiz novamente para limpar a URL.
+      if (_event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
+        navigate('/');
       }
-    );
+    });
 
-    // THEN check for existing session
+    // Verifica a sessão inicial ao carregar
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('AppLayout: Session check:', !!session);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
 
   if (loading) {
     return (
@@ -52,9 +55,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   }
 
   if (!user || !session) {
+    // Se não há sessão, renderiza a página de autenticação
     return <AuthPage />;
   }
-
+  
+  // Se há sessão, renderiza o layout principal da aplicação
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -62,13 +67,13 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         
         <div className="flex-1 flex flex-col">
           <header className="h-16 border-b border-border bg-card flex items-center px-6 shadow-soft">
-            <SidebarTrigger className="mr-4" />
+            <SidebarTrigger className="mr-4 md:hidden" />
             <div className="flex-1">
-              <h1 className="text-lg font-semibold">Quality Educacional - Sistema de Gestão Acadêmica</h1>
+              <h1 className="text-lg font-semibold">GradGate - Sistema de Gestão Acadêmica</h1>
             </div>
           </header>
           
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-6 overflow-auto bg-muted/40">
             {children}
           </main>
         </div>

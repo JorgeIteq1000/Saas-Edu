@@ -1,72 +1,70 @@
-import React, { useMemo } from "react";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "@/components/ui/toaster";
+import { SidebarProvider } from "@/components/ui/sidebar"; // Importar o SidebarProvider
+
+// Importações de Páginas
 import AppLayout from "./components/layout/AppLayout";
 import Dashboard from "./components/dashboard/Dashboard";
+import AuthPage from "./components/auth/AuthPage";
 import CoursesPage from "./components/courses/CoursesPage";
 import UsersPage from "./pages/UsersPage";
 import EnrollmentsPage from "./pages/EnrollmentsPage";
+import StudentEnrollmentDetailsPage from "./pages/StudentEnrollmentDetailsPage";
 import SalesPage from "./pages/SalesPage";
 import FinancePage from "./pages/FinancePage";
 import ProtocolsPage from "./pages/ProtocolsPage";
-import SettingsPage from "./pages/SettingsPage";
 import ReportsPage from "./pages/ReportsPage";
-import DocumentsPage from "./pages/DocumentsPage";
-import AnnouncementsPage from "./pages/AnnouncementsPage";
-import ContractsPage from "./pages/ContractsPage";
+import SettingsPage from "./pages/SettingsPage";
 import MyEnrollmentsPage from "./pages/MyEnrollmentsPage";
 import MyProtocolsPage from "./pages/MyProtocolsPage";
-import UserPermissionsPage from "./pages/UserPermissionsPage";
-import CertificatesPage from "./pages/CertificatesPage";
 import MyCertificatesPage from "./pages/MyCertificatesPage";
-import NotFound from "./pages/NotFound";
+import MyDataPage from "./pages/MyDataPage";
+import ContractsPage from "./pages/ContractsPage";
+import AnnouncementsPage from "./pages/AnnouncementsPage";
+import CertificatesPage from "./pages/CertificatesPage";
+import DocumentsPage from "./pages/DocumentsPage";
+
+const queryClient = new QueryClient();
 
 const App: React.FC = () => {
-  console.log('✅ App component renderizando...');
-  
-  const queryClient = useMemo(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 5 * 60 * 1000, // 5 minutes
-        retry: 1,
-      },
-    },
-  }), []);
+  console.log("✅ App component renderizando...");
 
   return (
     <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/courses" element={<CoursesPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/enrollments" element={<EnrollmentsPage />} />
-            <Route path="/sales" element={<SalesPage />} />
-            <Route path="/finance" element={<FinancePage />} />
-            <Route path="/protocols" element={<ProtocolsPage />} />
-            <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/announcements" element={<AnnouncementsPage />} />
-            <Route path="/contracts" element={<ContractsPage />} />
-            <Route path="/user-permissions" element={<UserPermissionsPage />} />
-            <Route path="/certificates" element={<CertificatesPage />} />
-            <Route path="/my-certificates" element={<MyCertificatesPage />} />
-            <Route path="/my-enrollments" element={<MyEnrollmentsPage />} />
-            <Route path="/my-protocols" element={<MyProtocolsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
-      </BrowserRouter>
-    </TooltipProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Router>
+          {/* CORREÇÃO APLICADA AQUI */}
+          <SidebarProvider>
+            <AppLayout>
+              <Routes>
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/courses" element={<CoursesPage />} />
+                <Route path="/contracts" element={<ContractsPage />} />
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/enrollments" element={<EnrollmentsPage />} />
+                <Route path="/matriculas/:studentId" element={<StudentEnrollmentDetailsPage />} />
+                <Route path="/sales" element={<SalesPage />} />
+                <Route path="/finance" element={<FinancePage />} />
+                <Route path="/protocols" element={<ProtocolsPage />} />
+                <Route path="/certificates" element={<CertificatesPage />} />
+                <Route path="/documents" element={<DocumentsPage />} />
+                <Route path="/announcements" element={<AnnouncementsPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                {/* Aluno Rotas */}
+                <Route path="/my-enrollments" element={<MyEnrollmentsPage />} />
+                <Route path="/my-protocols" element={<MyProtocolsPage />} />
+                <Route path="/my-certificates" element={<MyCertificatesPage />} />
+                <Route path="/my-data" element={<MyDataPage />} />
+              </Routes>
+            </AppLayout>
+          </SidebarProvider>
+        </Router>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 };
