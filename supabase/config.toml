@@ -2,48 +2,46 @@ project_id = "serzklumwbcvzbtezxrd"
 
 [api]
 enabled = true
-port = 54321
+port = 52321 # <-- AJUSTADO (estava em 54321)
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54322
-shadow_port = 54320
+port = 52322 # <-- AJUSTADO (estava em 54322)
+shadow_port = 52320 # <-- AJUSTADO (estava em 54320)
 major_version = 17
 
 [db.pooler]
 enabled = false
-port = 54329
+port = 52329 # <-- AJUSTADO (estava em 54329)
 pool_mode = "transaction"
 
 [realtime]
 enabled = true
-# As chaves 'port' e 'tenant_id' foram removidas daqui
 
 [studio]
 enabled = true
-port = 54323
-api_url = "http://127.0.0.1:54321"
+port = 52323 # <-- AJUSTADO (estava em 54323)
+api_url = "http://127.0.0.1:52321" # <-- AJUSTADO para refletir a nova porta da API
 
 [inbucket]
 enabled = true
-port = 54325
-smtp_port = 54326
-pop3_port = 54327
+port = 52325 # <-- AJUSTADO (estava em 54325)
+smtp_port = 52326 # <-- AJUSTADO (estava em 54326)
+pop3_port = 52327 # <-- AJUSTADO (estava em 54327)
 
 [storage]
 enabled = true
 file_size_limit = "50MiB"
-# A chave 'port' foi removida daqui
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:3000"
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# CORREÇÃO APLICADA AQUI
+site_url = "http://localhost:8080"
+additional_redirect_urls = ["http://localhost:8080"]
 jwt_expiry = 3600
 enable_signup = true
-# As chaves 'enable_email_confirmations' e 'port' foram removidas daqui
 
 [auth.email]
 enable_signup = true
@@ -51,4 +49,10 @@ double_confirm_changes = true
 enable_confirmations = false
 
 [functions.create-test-users]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.impersonate-user]
 verify_jwt = false

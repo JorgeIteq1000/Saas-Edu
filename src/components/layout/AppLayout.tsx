@@ -18,20 +18,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
 
   useEffect(() => {
-    // log: Lógica de autenticação aprimorada
+    // log: Lógica de autenticação aprimorada para lidar com o login por link mágico
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
       
-      // Se o usuário fez login (especialmente via link mágico que adiciona um # na URL)
-      // e estamos na página raiz, navegamos para a raiz novamente para limpar a URL.
       if (_event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
+        // Limpa a URL após um login via link mágico e redireciona para o dashboard
         navigate('/');
       }
     });
 
-    // Verifica a sessão inicial ao carregar
+    // Verifica a sessão inicial ao carregar a página
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -59,7 +58,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     return <AuthPage />;
   }
   
-  // Se há sessão, renderiza o layout principal da aplicação
+  // Se há sessão, renderiza o layout principal da aplicação com a estrutura visual correta
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
