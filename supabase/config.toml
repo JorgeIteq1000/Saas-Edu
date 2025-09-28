@@ -1,20 +1,22 @@
+# supabase/config.toml
+
 project_id = "serzklumwbcvzbtezxrd"
 
 [api]
 enabled = true
-port = 52321 # <-- AJUSTADO (estava em 54321)
+port = 60001
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 52322 # <-- AJUSTADO (estava em 54322)
-shadow_port = 52320 # <-- AJUSTADO (estava em 54320)
+port = 60002
+shadow_port = 60000
 major_version = 17
 
 [db.pooler]
 enabled = false
-port = 52329 # <-- AJUSTADO (estava em 54329)
+port = 60009
 pool_mode = "transaction"
 
 [realtime]
@@ -22,14 +24,14 @@ enabled = true
 
 [studio]
 enabled = true
-port = 52323 # <-- AJUSTADO (estava em 54323)
-api_url = "http://127.0.0.1:52321" # <-- AJUSTADO para refletir a nova porta da API
+port = 60003
+api_url = "http://127.0.0.1:60001"
 
 [inbucket]
 enabled = true
-port = 52325 # <-- AJUSTADO (estava em 54325)
-smtp_port = 52326 # <-- AJUSTADO (estava em 54326)
-pop3_port = 52327 # <-- AJUSTADO (estava em 54327)
+port = 60005
+smtp_port = 60006
+pop3_port = 60007
 
 [storage]
 enabled = true
@@ -37,7 +39,6 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-# CORREÇÃO APLICADA AQUI
 site_url = "http://localhost:8080"
 additional_redirect_urls = ["http://localhost:8080"]
 jwt_expiry = 3600
