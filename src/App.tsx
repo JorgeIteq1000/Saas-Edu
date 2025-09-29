@@ -25,6 +25,10 @@ import ContractsPage from "./pages/ContractsPage";
 import AnnouncementsPage from "./pages/AnnouncementsPage";
 import CertificatesPage from "./pages/CertificatesPage";
 import DocumentsPage from "./pages/DocumentsPage";
+import MyReferralsPage from "./pages/MyReferralsPage"; // Nova importação
+import ReferralsPage from "./pages/ReferralsPage"; // Nova importação
+import UserPermissionsPage from "./pages/UserPermissionsPage"; // Nova importação
+
 
 const queryClient = new QueryClient();
 
@@ -60,6 +64,11 @@ const App: React.FC = () => {
                 <Route path="/my-protocols" element={<MyProtocolsPage />} />
                 <Route path="/my-certificates" element={<MyCertificatesPage />} />
                 <Route path="/my-data" element={<MyDataPage />} />
+                <Route path="/my-referrals" element={<MyReferralsPage />} /> {/* Nova Rota */}
+                <Route path="/referrals" element={<ReferralsPage />} /> {/* Nova Rota */}
+                <Route path="/user-permissions" element={<UserPermissionsPage />} /> {/* Rota Adicionada */}
+
+
               </Routes>
             </AppLayout>
           </SidebarProvider>

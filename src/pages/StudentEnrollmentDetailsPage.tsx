@@ -5,10 +5,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, User, BookOpen, DollarSign, Activity, Copy, LogIn } from 'lucide-react'; // Adicionado LogIn
+import { ArrowLeft, User, BookOpen, DollarSign, Activity, Copy, LogIn, Users as UsersIcon } from 'lucide-react'; // Adicionado Users as UsersIcon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Loader2 } from 'lucide-react'; // Adicionado Loader2
+import { Loader2 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Adicionado para a nova tabela
+
 
 // ... (Interface Profile e Enrollment permanecem as mesmas)
 interface Profile {
@@ -197,11 +199,12 @@ const StudentEnrollmentDetailsPage = () => {
 
       {/* O resto do componente (Tabs) permanece o mesmo */}
       <Tabs defaultValue="courses">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="courses"><BookOpen className="mr-2 h-4 w-4"/>Cursos</TabsTrigger>
           <TabsTrigger value="personal-data"><User className="mr-2 h-4 w-4"/>Dados Pessoais</TabsTrigger>
           <TabsTrigger value="financial"><DollarSign className="mr-2 h-4 w-4"/>Financeiro</TabsTrigger>
           <TabsTrigger value="activities"><Activity className="mr-2 h-4 w-4"/>Atividades</TabsTrigger>
+          <TabsTrigger value="indications"><UsersIcon className="mr-2 h-4 w-4"/>Indicações</TabsTrigger>
         </TabsList>
 
         <TabsContent value="courses">
@@ -284,6 +287,12 @@ const StudentEnrollmentDetailsPage = () => {
         <TabsContent value="activities">
             <Card>
                 <CardHeader><CardTitle>Atividades Recentes</CardTitle></CardHeader>
+                <CardContent><p className="text-center text-muted-foreground py-8">Em desenvolvimento...</p></CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="indications">
+            <Card>
+                <CardHeader><CardTitle>Indicações</CardTitle></CardHeader>
                 <CardContent><p className="text-center text-muted-foreground py-8">Em desenvolvimento...</p></CardContent>
             </Card>
         </TabsContent>

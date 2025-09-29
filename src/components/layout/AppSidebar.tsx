@@ -26,7 +26,8 @@ import {
   DollarSign,
   BarChart3,
   Megaphone,
-  User // CORREÇÃO: Adicionado o ícone 'User'
+  User,
+  Gift // CORREÇÃO: Ícone importado
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -90,6 +91,7 @@ const AppSidebar = () => {
       { title: 'Usuários', url: '/users', icon: Users, permission: 'users' },
       { title: 'Matrículas', url: '/enrollments', icon: UserPlus, permission: 'enrollments' },
       { title: 'Vendas', url: '/sales', icon: TrendingUp, permission: 'sales' },
+      { title: 'Indicações', url: '/referrals', icon: Gift, permission: 'sales' }, // Adicionado aqui, usando a permissão de vendas por enquanto
       { title: 'Financeiro', url: '/finance', icon: DollarSign, permission: 'finance' },
       { title: 'Protocolos', url: '/protocols', icon: FileText, permission: 'protocols' },
       { title: 'Certificados', url: '/certificates', icon: GraduationCap, permission: 'certificates' },
@@ -124,7 +126,8 @@ const AppSidebar = () => {
         { title: 'Meus Protocolos', url: '/my-protocols', icon: FileText },
         { title: 'Meus Certificados', url: '/my-certificates', icon: GraduationCap },
         { title: 'Documentos', url: '/my-documents', icon: FileText },
-        { title: 'Meus Dados', url: '/my-data', icon: User } // CORREÇÃO: Usando o ícone 'User' importado
+        { title: 'Meus Dados', url: '/my-data', icon: User },
+        { title: 'Indicação Premiada', url: '/my-referrals', icon: Gift }
       );
     }
 
