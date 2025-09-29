@@ -21,7 +21,7 @@ const AuthPage = () => {
     setIsLoading(true);
     setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -33,7 +33,27 @@ const AuthPage = () => {
         description: error.message,
         variant: "destructive",
       });
-    } else {
+    } else if (data.user) { // Verificação se o usuário existe na resposta
+      // log: Lógica para registrar o log de login do aluno
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .eq('user_id', data.user.id)
+          .single();
+
+        if (profile && profile.role === 'aluno') {
+          await supabase.from('student_activity_logs').insert({
+            student_id: profile.id, // O alvo da ação é o próprio aluno
+            actor_id: profile.id,   // O autor da ação é o próprio aluno
+            action_type: 'login_aluno'
+          });
+        }
+      } catch (logError: any) {
+        // Opcional: notificar sobre falha no log, mas não impedir o login
+        console.error("log: Falha ao registrar log de atividade do aluno:", logError.message);
+      }
+      
       toast({
         title: "Login realizado com sucesso!",
         description: "Bem-vindo de volta.",
