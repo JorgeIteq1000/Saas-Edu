@@ -21,14 +21,13 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
-// log: Schema de validação atualizado com os novos campos e ENUM completo
-const courseSchema = z.object({
+// log: CORREÇÃO - O schema agora representa os DADOS DO FORMULÁRIO, sem o campo 'course_type' que será derivado.
+const formSchema = z.object({
   name: z.string().min(3, 'O nome do curso é obrigatório'),
   code: z.string().optional(),
   description: z.string().optional(),
   course_type_id: z.string().min(1, 'O tipo de curso é obrigatório'),
   certifying_institution_id: z.string().min(1, 'A faculdade certificadora é obrigatória'),
-  course_type: z.enum(['graduacao', 'pos_graduacao', 'especializacao', 'extensao', 'tecnico', 'livre']),
   modality: z.enum(['ead', 'presencial', 'hibrido']),
   duration_months: z.coerce.number().min(1, 'Duração deve ser maior que zero'),
   workload_hours: z.coerce.number().min(1, 'Carga horária deve ser maior que zero'),
@@ -69,8 +68,8 @@ const NewCourseModal = ({ open, onOpenChange, onCourseCreated }: NewCourseModalP
   const [courseTypes, setCourseTypes] = useState<CourseType[]>([]);
   const [certifyingInstitutions, setCertifyingInstitutions] = useState<CertifyingInstitution[]>([]);
 
-  const form = useForm<z.infer<typeof courseSchema>>({
-    resolver: zodResolver(courseSchema),
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
       code: '',
@@ -108,9 +107,15 @@ const NewCourseModal = ({ open, onOpenChange, onCourseCreated }: NewCourseModalP
     }
   }, [open, toast]);
 
-  const onSubmit = async (values: z.infer<typeof courseSchema>) => {
+  // log: CORREÇÃO - Reintroduzida a lógica para derivar o 'course_type' (enum) a partir do 'course_type_id' (uuid).
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     try {
+      const selectedCourseType = courseTypes.find(ct => ct.id === values.course_type_id);
+      if (!selectedCourseType) {
+        throw new Error("Tipo de curso selecionado é inválido.");
+      }
+      
       const courseTypeMap: { [key: string]: string } = {
         'graduação': 'graduacao',
         'pós-graduação': 'pos_graduacao',
@@ -120,15 +125,19 @@ const NewCourseModal = ({ open, onOpenChange, onCourseCreated }: NewCourseModalP
         'livre': 'livre',
       };
       
-      const selectedCourseType = courseTypes.find(ct => ct.id === values.course_type_id);
-      const courseTypeName = selectedCourseType ? selectedCourseType.name.toLowerCase() : 'graduacao';
-      const enumCourseType = courseTypeMap[courseTypeName] || 'graduacao';
-      
+      const courseTypeName = selectedCourseType.name.toLowerCase();
+      const enumCourseType = courseTypeMap[courseTypeName];
+
+      if (!enumCourseType) {
+        throw new Error(`O tipo de curso "${selectedCourseType.name}" não é um valor de enum válido no banco de dados.`);
+      }
+
+      // Cria o objeto final para inserção, adicionando o campo 'course_type' obrigatório.
       const dataToInsert = {
         ...values,
-        course_type: enumCourseType as any,
+        course_type: enumCourseType,
       };
-      
+
       const { error } = await supabase.from('courses').insert([dataToInsert]);
       if (error) throw error;
       
@@ -137,7 +146,7 @@ const NewCourseModal = ({ open, onOpenChange, onCourseCreated }: NewCourseModalP
       onOpenChange(false);
       form.reset();
     } catch (error: any) {
-      console.error("Erro ao criar curso:", error);
+      console.error("log: Erro ao criar curso:", error);
       toast({ title: "Erro", description: error.message || "Não foi possível criar o curso.", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -163,23 +172,22 @@ const NewCourseModal = ({ open, onOpenChange, onCourseCreated }: NewCourseModalP
             <FormField name="description" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Descrição</FormLabel><FormControl><Textarea placeholder="Breve descrição sobre o curso..." {...field} /></FormControl><FormMessage /></FormItem> )} />
 
             <div className="grid grid-cols-3 gap-4">
-               <FormField name="course_type_id" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Tipo de Curso</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{courseTypes.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem> )} />
+              <FormField name="course_type_id" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Tipo de Curso</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{courseTypes.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem> )} />
               <FormField name="certifying_institution_id" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Faculdade Certificadora</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{certifyingInstitutions.map(inst => <SelectItem key={inst.id} value={inst.id}>{inst.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem> )} />
               <FormField name="modality" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Modalidade</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="ead">EAD</SelectItem><SelectItem value="presencial">Presencial</SelectItem><SelectItem value="hibrido">Híbrido</SelectItem></SelectContent></Select><FormMessage /></FormItem> )} />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-               <FormField name="duration_months" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Duração (meses)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
+              <FormField name="duration_months" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Duração (meses)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
               <FormField name="workload_hours" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Carga Horária (horas)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
-               <FormField name="max_installments" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Max. Parcelas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
+              <FormField name="max_installments" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Max. Parcelas</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem> )} />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <FormField name="enrollment_fee" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Taxa de Matrícula (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
-               <FormField name="monthly_fee" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Mensalidade (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
+              <FormField name="monthly_fee" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Mensalidade (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem> )} />
             </div>
             
-            {/* CORREÇÃO APLICADA AQUI: Estrutura do formulário de checkboxes foi simplificada */}
             <FormField
               control={form.control}
               name="payment_methods"
