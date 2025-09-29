@@ -5,14 +5,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, User, BookOpen, DollarSign, Activity, Copy, LogIn, Users as UsersIcon } from 'lucide-react'; // Adicionado Users as UsersIcon
+import { ArrowLeft, User, BookOpen, DollarSign, Activity, Copy, LogIn, Users as UsersIcon } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Adicionado para a nova tabela
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-
-// ... (Interface Profile e Enrollment permanecem as mesmas)
+// Interfaces
 interface Profile {
   full_name: string;
   email: string;
@@ -51,56 +50,65 @@ interface Enrollment {
   };
 }
 
+interface Referral {
+    id: string;
+    created_at: string;
+    referred_name: string;
+    status: string;
+    course: {
+        name: string;
+    }
+}
 
-// ... (Componentes DataField e CopyableInfo permanecem os mesmos)
+// Componentes Auxiliares
 const DataField = ({ label, value }: { label: string; value?: string | null }) => (
     <div className="flex flex-col space-y-1">
       <p className="text-sm font-medium text-muted-foreground">{label}</p>
       <p>{value || '-'}</p>
     </div>
-  );
-  
-  const CopyableInfo = ({ text }: { text: string | null | undefined }) => {
-      const { toast } = useToast();
-      
-      const copyToClipboard = () => {
-          if (text) {
-              navigator.clipboard.writeText(text);
-              toast({ title: "Copiado!", description: `${text} copiado para a área de transferência.` });
-          }
-      };
-  
-      return (
-          <div className="flex items-center gap-2">
-              <span>{text || '-'}</span>
-              <TooltipProvider>
-                  <Tooltip>
-                      <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyToClipboard}>
-                              <Copy className="h-4 w-4" />
-                          </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                          <p>Copiar</p>
-                      </TooltipContent>
-                  </Tooltip>
-              </TooltipProvider>
-          </div>
-      );
-  };
+);
 
+const CopyableInfo = ({ text }: { text: string | null | undefined }) => {
+    const { toast } = useToast();
+    
+    const copyToClipboard = () => {
+        if (text) {
+            navigator.clipboard.writeText(text);
+            toast({ title: "Copiado!", description: `${text} copiado para a área de transferência.` });
+        }
+    };
 
+    return (
+        <div className="flex items-center gap-2">
+            <span>{text || '-'}</span>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={copyToClipboard}>
+                            <Copy className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Copiar</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
+    );
+};
+
+// Componente Principal
 const StudentEnrollmentDetailsPage = () => {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [impersonating, setImpersonating] = useState(false); // Novo estado
+  const [impersonating, setImpersonating] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
 
   useEffect(() => {
-    // ... (useEffect permanece o mesmo)
     if (!studentId) {
         toast({ title: "Erro", description: "ID do aluno não encontrado.", variant: "destructive" });
         navigate('/enrollments');
@@ -110,20 +118,20 @@ const StudentEnrollmentDetailsPage = () => {
       const fetchData = async () => {
         setLoading(true);
         try {
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', studentId)
-            .single();
-          if (profileError) throw profileError;
-          setProfile(profileData);
+          const [profileResult, enrollmentsResult, referralsResult] = await Promise.all([
+            supabase.from('profiles').select('*').eq('id', studentId).single(),
+            supabase.from('enrollments').select(`*, courses (*)`).eq('student_id', studentId),
+            supabase.from('referrals').select(`*, course:courses!referrals_interested_course_id_fkey(name)`).eq('referred_by_student_id', studentId)
+          ]);
+
+          if (profileResult.error) throw profileResult.error;
+          setProfile(profileResult.data);
   
-          const { data: enrollmentsData, error: enrollmentsError } = await supabase
-            .from('enrollments')
-            .select(`*, courses (*)`)
-            .eq('student_id', studentId);
-          if (enrollmentsError) throw enrollmentsError;
-          setEnrollments(enrollmentsData as any[] || []);
+          if (enrollmentsResult.error) throw enrollmentsResult.error;
+          setEnrollments(enrollmentsResult.data as any[] || []);
+
+          if (referralsResult.error) throw referralsResult.error;
+          setReferrals(referralsResult.data as any[] || []);
   
         } catch (error: any) {
           console.error("log: Erro ao buscar detalhes do aluno:", error);
@@ -136,7 +144,6 @@ const StudentEnrollmentDetailsPage = () => {
       fetchData();
   }, [studentId, toast, navigate]);
 
-  // Nova função para lidar com o login "como aluno"
   const handleImpersonate = async () => {
     if (!profile) return;
     setImpersonating(true);
@@ -161,7 +168,7 @@ const StudentEnrollmentDetailsPage = () => {
   };
 
   if (loading) {
-    return <div className="p-6 text-center">Carregando dados do aluno...</div>;
+    return <div className="p-6 text-center"><Loader2 className="mr-2 h-8 w-8 animate-spin inline" /> Carregando...</div>;
   }
 
   if (!profile) {
@@ -185,7 +192,6 @@ const StudentEnrollmentDetailsPage = () => {
                 <div className="flex items-center"><strong className="mr-2">Telefone:</strong> <CopyableInfo text={profile.phone} /></div>
             </div>
           </div>
-          {/* Botão de Acessar Portal */}
           <Button onClick={handleImpersonate} disabled={impersonating}>
             {impersonating ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -197,7 +203,6 @@ const StudentEnrollmentDetailsPage = () => {
         </CardHeader>
       </Card>
 
-      {/* O resto do componente (Tabs) permanece o mesmo */}
       <Tabs defaultValue="courses">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="courses"><BookOpen className="mr-2 h-4 w-4"/>Cursos</TabsTrigger>
@@ -246,7 +251,7 @@ const StudentEnrollmentDetailsPage = () => {
                     <DataField label="Órgão Expedidor" value={profile.rg_issuer} />
                 </CardContent>
             </Card>
-             <Card className="mt-6">
+            <Card className="mt-6">
                 <CardHeader><CardTitle>Endereço</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <DataField label="CEP" value={profile.address_zip_code} />
@@ -258,7 +263,7 @@ const StudentEnrollmentDetailsPage = () => {
                     <DataField label="Estado" value={profile.address_state} />
                 </CardContent>
             </Card>
-             <Card className="mt-6">
+            <Card className="mt-6">
                 <CardHeader><CardTitle>Filiação e Naturalidade</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <DataField label="Nome da Mãe" value={profile.mother_name} />
@@ -268,7 +273,7 @@ const StudentEnrollmentDetailsPage = () => {
                     <DataField label="Cidade Natal" value={profile.birth_city} />
                 </CardContent>
             </Card>
-             <Card className="mt-6">
+            <Card className="mt-6">
                 <CardHeader><CardTitle>Dados Acadêmicos Anteriores</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <DataField label="Instituição de Ensino" value={profile.previous_institution} />
@@ -292,8 +297,36 @@ const StudentEnrollmentDetailsPage = () => {
         </TabsContent>
         <TabsContent value="indications">
             <Card>
-                <CardHeader><CardTitle>Indicações</CardTitle></CardHeader>
-                <CardContent><p className="text-center text-muted-foreground py-8">Em desenvolvimento...</p></CardContent>
+                <CardHeader>
+                    <CardTitle>Indicações Realizadas</CardTitle>
+                    <CardDescription>Lista de amigos que este aluno indicou.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {referrals.length > 0 ? (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Amigo Indicado</TableHead>
+                                    <TableHead>Curso de Interesse</TableHead>
+                                    <TableHead>Data da Indicação</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {referrals.map(ref => (
+                                    <TableRow key={ref.id}>
+                                        <TableCell>{ref.referred_name}</TableCell>
+                                        <TableCell>{ref.course.name}</TableCell>
+                                        <TableCell>{new Date(ref.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                                        <TableCell><Badge>{ref.status}</Badge></TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : (
+                        <p className="text-center text-muted-foreground py-8">Este aluno ainda não fez indicações.</p>
+                    )}
+                </CardContent>
             </Card>
         </TabsContent>
       </Tabs>
