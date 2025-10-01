@@ -5,13 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BookOpen, Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Search, Edit, Trash2, BookMarked } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CourseTypesManagement from '@/components/courses/CourseTypesManagement';
 import CertifyingInstitutionsManagement from '@/components/courses/CertifyingInstitutionsManagement';
 import NewCourseModal from './NewCourseModal';
+import PedagogicalModal from './PedagogicalModal'; // 1. Importar o novo modal
 
 // Interface ajustada para refletir os dados aninhados
 interface Course {
@@ -26,7 +27,6 @@ interface Course {
   monthly_fee: number;
   active: boolean;
   created_at: string;
-  // Tipos para os dados relacionados (joins)
   course_types: {
     name: string;
   } | null;
@@ -43,7 +43,6 @@ const CoursesPage = () => {
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      // Consulta corrigida para buscar os nomes das tabelas relacionadas
       const { data, error } = await supabase
         .from('courses')
         .select(`
@@ -66,7 +65,6 @@ const CoursesPage = () => {
     }
   };
 
-  // Removido o fetchCourses do array de dependência para evitar o loop
   useEffect(() => {
     if (hasPermission('courses', 'view')) {
       fetchCourses();
@@ -154,6 +152,7 @@ const CoursesPage = () => {
                       <TableHead>Status</TableHead>
                       <TableHead>Data de Criação</TableHead>
                       {hasPermission('courses', 'edit') && <TableHead>Ações</TableHead>}
+                      <TableHead>Pedagógico</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -195,6 +194,10 @@ const CoursesPage = () => {
                             </div>
                           </TableCell>
                         )}
+                        {/* --- 2. USAR O NOVO COMPONENTE AQUI --- */}
+                        <TableCell>
+                           <PedagogicalModal courseId={course.id} courseName={course.name} />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
