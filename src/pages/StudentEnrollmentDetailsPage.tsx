@@ -11,6 +11,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import SagahLaunchButton from '@/components/learning/SagahLaunchButton';
 
 // Interfaces
 interface Profile {
@@ -40,15 +42,28 @@ interface Profile {
   graduation_date?: string;
 }
 
+interface LearningUnit {
+    id: string;
+    name: string;
+}
+
+interface Discipline {
+    id: string;
+    name: string;
+    learning_units: LearningUnit[];
+}
+
 interface Enrollment {
   id: string;
   status: string;
   enrollment_date: string;
   courses: {
+    id: string;
     name: string;
     description: string;
     duration_months: number;
   };
+  disciplines?: Discipline[]; // Adicionado para carregar as disciplinas
 }
 
 interface Referral {
@@ -189,8 +204,50 @@ const StudentEnrollmentDetailsPage = () => {
         setEditableProfile(profileResult.data || {});
         
         if (enrollmentsResult.error) throw enrollmentsResult.error;
-        setEnrollments(enrollmentsResult.data as any[] || []);
+        // ==============================================================================
+        // INÍCIO DA LÓGICA PARA BUSCAR DISCIPLINAS E UAS
+        // ==============================================================================
+        const enrollmentsData = enrollmentsResult.data as any[] || [];
+        const enrichedEnrollments = await Promise.all(
+          enrollmentsData.map(async (enroll) => {
+            // 1. Buscar as disciplinas do curso
+            const { data: courseDisciplines, error: cdError } = await supabase
+              .from('course_disciplines')
+              .select('*, discipline:disciplines(*)')
+              .eq('course_id', enroll.courses.id);
 
+            if (cdError) {
+              console.error("Erro ao buscar disciplinas do curso:", cdError);
+              return { ...enroll, disciplines: [] };
+            }
+
+            const disciplines = courseDisciplines.map(cd => cd.discipline).filter(Boolean);
+
+            // 2. Para cada disciplina, buscar as Unidades de Aprendizagem
+            const disciplinesWithUAs = await Promise.all(
+              disciplines.map(async (discipline) => {
+                const { data: learningUnits, error: uaError } = await supabase
+                  .from('learning_units')
+                  .select('id, name')
+                  .eq('discipline_id', discipline.id)
+                  .order('created_at', { ascending: true });
+
+                if (uaError) {
+                  console.error("Erro ao buscar UAs:", uaError);
+                  return { ...discipline, learning_units: [] };
+                }
+
+                return { ...discipline, learning_units: learningUnits };
+              })
+            );
+
+            return { ...enroll, disciplines: disciplinesWithUAs };
+          })
+        );
+        setEnrollments(enrichedEnrollments as any[] || []);
+        // ==============================================================================
+        // FIM DA LÓGICA
+        // ==============================================================================
         if (referralsResult.error) throw referralsResult.error;
         setReferrals(referralsResult.data as any[] || []);
         
@@ -331,7 +388,7 @@ const StudentEnrollmentDetailsPage = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Cursos Matriculados</CardTitle>
-                  <CardDescription>Lista de todos os cursos em que o aluno está ou esteve matriculado.</CardDescription>
+                  <CardDescription>Estrutura pedagógica dos cursos em que o aluno está matriculado.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {enrollments.map(enroll => (
@@ -346,8 +403,45 @@ const StudentEnrollmentDetailsPage = () => {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-sm text-muted-foreground mb-4">{enroll.courses.description || 'Sem descrição.'}</p>
-                        <Button size="sm">Ver Detalhes do Curso</Button>
+                        {/* ========================================================= */}
+                        {/* INÍCIO DO ACCORDION COM DISCIPLINAS E UAS                  */}
+                        {/* ========================================================= */}
+                        <Accordion type="single" collapsible className="w-full">
+                          {(enroll.disciplines && enroll.disciplines.length > 0) ? (
+                            enroll.disciplines.map((discipline) => (
+                              <AccordionItem value={`discipline-${discipline.id}`} key={discipline.id}>
+                                <AccordionTrigger>{discipline.name}</AccordionTrigger>
+                                <AccordionContent>
+                                  {discipline.learning_units.length > 0 ? (
+                                    <ul className="space-y-2 pt-2">
+                                      {discipline.learning_units.map((ua) => (
+                                        <li key={ua.id} className="flex items-center justify-between p-2 rounded-md hover:bg-gray-50">
+                                          <span>{ua.name}</span>
+                                          {studentId && (
+                                            <SagahLaunchButton
+                                              userId={studentId}
+                                              disciplineId={discipline.id}
+                                              learningUnitId={ua.id}
+                                            >
+                                              Acessar conteúdo
+                                            </SagahLaunchButton>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-sm text-center text-muted-foreground py-4">Nenhuma unidade de aprendizagem cadastrada para esta disciplina.</p>
+                                  )}
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))
+                          ) : (
+                            <p className="text-sm text-center text-muted-foreground py-4">Nenhuma disciplina encontrada para este curso.</p>
+                          )}
+                        </Accordion>
+                        {/* ========================================================= */}
+                        {/* FIM DO ACCORDION                                         */}
+                        {/* ========================================================= */}
                       </CardContent>
                     </Card>
                   ))}
