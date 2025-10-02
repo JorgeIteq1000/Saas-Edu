@@ -9,9 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft, Check, X, BookOpen } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from '@/components/ui/badge';
-import SagahLaunchButton from '@/components/learning/SagahLaunchButton'; // Importe o botão
+import SagahLaunchButton from '@/components/learning/SagahLaunchButton';
 
-// Interfaces (sem alteração)
+// Interfaces
 interface Grade {
   learning_unit_id: string;
   grade: number;
@@ -42,7 +42,6 @@ const MyCourseDisciplinesPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // A lógica de busca de dados permanece a mesma
     const fetchDisciplinesAndGrades = async () => {
       if (!enrollmentId) return;
       try {
@@ -61,20 +60,23 @@ const MyCourseDisciplinesPage = () => {
 
         let disciplines = disciplinesData.map((item: any) => item.discipline).filter(Boolean);
 
-        const mockGrades: Grade[] = disciplines.flatMap((d: Discipline) => 
-            d.learning_units.map(ua => ({
-                learning_unit_id: ua.id,
-                grade: parseFloat((Math.random() * 5 + 5).toFixed(1))
-            }))
-        );
+        // BUSCANDO NOTAS REAIS DO BANCO DE DADOS
+        const { data: gradesData, error: gradesError } = await supabase
+          .from('student_grades')
+          .select('learning_unit_id, grade')
+          .eq('enrollment_id', enrollmentId)
+          .eq('student_id', enrollmentData.student_id);
+
+        if (gradesError) throw gradesError;
         
+        // Associar notas e calcular médias
         disciplines.forEach((discipline: Discipline) => {
             let totalGrade = 0;
             let gradedUnits = 0;
             discipline.learning_units.forEach(ua => {
-                const gradeInfo = mockGrades.find(g => g.learning_unit_id === ua.id);
-                if (gradeInfo) {
-                    ua.grade = gradeInfo;
+                const gradeInfo = gradesData.find(g => g.learning_unit_id === ua.id);
+                if (gradeInfo && gradeInfo.grade !== null) {
+                    ua.grade = { learning_unit_id: ua.id, grade: gradeInfo.grade };
                     totalGrade += gradeInfo.grade;
                     gradedUnits++;
                 }
@@ -90,6 +92,7 @@ const MyCourseDisciplinesPage = () => {
         });
 
       } catch (error: any) {
+        console.error("log: Erro ao buscar disciplinas/notas:", error);
         toast({ title: "Erro", description: "Não foi possível carregar as disciplinas.", variant: "destructive" });
       } finally {
         setLoading(false);
@@ -156,15 +159,21 @@ const MyCourseDisciplinesPage = () => {
                 <AccordionContent>
                   <div className="space-y-3 pl-4 border-l-2 ml-2">
                     {discipline.learning_units.length > 0 ? discipline.learning_units.map(ua => (
-                      // --- ESTRUTURA DA LINHA DA UA ALTERADA AQUI ---
                       <div key={ua.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
                         <span className="flex-1">{ua.name}</span>
                         <div className="flex items-center gap-6">
                           {ua.grade ? <GradeIndicator grade={ua.grade.grade} /> : <Badge variant="secondary" className="w-24 justify-center">Aguardando</Badge>}
-                          <SagahLaunchButton learningUnitId={ua.id} size="sm">
+                          
+                          {/* BOTÃO ATUALIZADO COM enrollmentId */}
+                          <SagahLaunchButton 
+                            learningUnitId={ua.id} 
+                            enrollmentId={enrollmentId!} // Passando o ID da matrícula
+                            size="sm"
+                          >
                             <BookOpen className="mr-2 h-4 w-4" />
                             Estudar
                           </SagahLaunchButton>
+
                         </div>
                       </div>
                     )) : <p className="text-sm text-muted-foreground p-2">Nenhuma Unidade de Aprendizagem nesta disciplina.</p>}
