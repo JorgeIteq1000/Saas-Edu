@@ -3,10 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { GraduationCap, Calendar, CreditCard, BookCopy } from 'lucide-react'; // 1. Importar BookCopy
+import { GraduationCap, Calendar, CreditCard, BookCopy, ArrowRight } from 'lucide-react'; // 1. Importar BookCopy
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button'; // 2. Importar Button
 import { CourseDisciplinesModal } from './CourseDisciplinesModal'; // 3. Importar o modal de disciplinas
+import { useNavigate } from 'react-router-dom'; // Adicione isto
 
 interface Enrollment {
   id: string;
@@ -28,6 +29,7 @@ const MyEnrollmentsPage = () => {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // 4. Adicionar estados para controlar o modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -236,11 +238,11 @@ const MyEnrollmentsPage = () => {
                         </TableCell>
                         {/* 8. Adicionar a célula com o botão */}
                         <TableCell className="text-right">
-                           <Button size="sm" onClick={() => handleOpenDisciplines(enrollment.course)}>
-                                <BookCopy className="mr-2 h-4 w-4" />
-                                Disciplinas
-                            </Button>
-                        </TableCell>
+                          <Button size="sm" onClick={() => navigate(`/curso/${enrollment.id}`)}>
+                              <ArrowRight className="mr-2 h-4 w-4" />
+                              Acessar Curso
+                          </Button>
+                      </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

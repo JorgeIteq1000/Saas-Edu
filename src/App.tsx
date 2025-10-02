@@ -28,6 +28,8 @@ import DocumentsPage from "./pages/DocumentsPage";
 import MyReferralsPage from "./pages/MyReferralsPage"; // Nova importação
 import ReferralsPage from "./pages/ReferralsPage"; // Nova importação
 import UserPermissionsPage from "./pages/UserPermissionsPage"; // Nova importação
+import CoursePortalPage from "./pages/CoursePortalPage"; // Adicione esta linha
+import MyCourseDisciplinesPage from "./pages/MyCourseDisciplinesPage"; // Adicione esta linha
 
 
 const queryClient = new QueryClient();
@@ -67,6 +69,8 @@ const App: React.FC = () => {
                 <Route path="/my-referrals" element={<MyReferralsPage />} /> {/* Nova Rota */}
                 <Route path="/referrals" element={<ReferralsPage />} /> {/* Nova Rota */}
                 <Route path="/user-permissions" element={<UserPermissionsPage />} /> {/* Rota Adicionada */}
+                <Route path="/curso/:enrollmentId" element={<CoursePortalPage />} />
+                <Route path="/curso/:enrollmentId/disciplinas" element={<MyCourseDisciplinesPage />} />
 
 
               </Routes>
