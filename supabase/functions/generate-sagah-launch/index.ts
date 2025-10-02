@@ -1,130 +1,96 @@
-// supabase/functions/generate-sagah-launch/index.ts
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import OAuth from 'https://esm.sh/oauth-1.0a@2.2.6'
 
-import { createClient } from '@supabase/supabase-js';
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { corsHeaders } from '../_shared/cors.ts';
-import { OAuth } from 'oauth_ts';
+const handleResponse = (data: any, status = 200) => {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      'Content-Type': 'application/json',
+    },
+  })
+}
 
-// Configurações do LTI
-const SAGAH_KEY = Deno.env.get('SAGAH_LTI_KEY') || 'iteq_prd';
-const SAGAH_SECRET = Deno.env.get('SAGAH_LTI_SECRET') || '84992f1a787db06bb20f488a9c91a731';
-const SAGAH_LAUNCH_URL = 'https://api.plataforma.grupoa.education/v2/safea-client/auth/launch/lti/ies/iteq_prod/application/gaia-lite';
+function bufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
 serve(async (req) => {
-  console.log('log: Iniciando a função generate-sagah-launch');
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' } })
   }
 
   try {
-    const { userId, disciplineId, learningUnitId } = await req.json();
-    console.log(`log: Recebido userId: ${userId}, disciplineId: ${disciplineId}, learningUnitId: ${learningUnitId}`);
+    const { learningUnitId } = await req.json();
+    if (!learningUnitId) throw new Error('O ID da Unidade de Aprendizagem é obrigatório.');
 
-    if (!userId || !disciplineId || !learningUnitId) {
-      throw new Error('userId, disciplineId e learningUnitId são obrigatórios.');
-    }
-
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, full_name, email')
-      .eq('id', userId)
-      .single();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return handleResponse({ error: 'Usuário não autenticado' }, 401);
 
-    const { data: discipline, error: disciplineError } = await supabaseAdmin
-      .from('disciplines')
-      .select('id, name')
-      .eq('id', disciplineId)
-      .single();
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
+    if (profileError) throw profileError;
 
-    const { data: learningUnit, error: learningUnitError } = await supabaseAdmin
+    const { data: learningUnit, error: unitError } = await supabase
       .from('learning_units')
-      .select('id, name, sagah_content_id')
+      .select('*, discipline:disciplines(*)')
       .eq('id', learningUnitId)
       .single();
 
-    if (profileError || disciplineError || learningUnitError) {
-      console.error({ profileError, disciplineError, learningUnitError });
-      throw new Error('Não foi possível encontrar os dados para o lançamento LTI.');
-    }
-    
-    console.log(`log: Dados encontrados - Aluno: ${profile.full_name}, Disciplina: ${discipline.name}, UA: ${learningUnit.name}`);
+    if (unitError) throw unitError;
+    if (!learningUnit) return handleResponse({ error: 'Unidade de Aprendizagem não encontrada' }, 404);
+    if (!learningUnit.sagah_content_id) return handleResponse({ error: 'Esta UA não possui um Content ID da Sagah.' }, 400);
 
-    const [firstName, ...lastNameParts] = (profile.full_name || '').split(' ');
-    const lastName = lastNameParts.join(' ');
-    
-    const launchParams: { [key: string]: string } = {
-      contentId: learningUnit.sagah_content_id,
-      user_id: profile.id,
-      lis_person_sourcedid: profile.id,
-      roles: 'urn:lti:role:ims/lis/Learner',
-      lis_person_name_full: profile.full_name || 'Aluno',
-      lis_person_name_given: firstName || 'Aluno',
-      lis_person_name_family: lastName || 'Sobrenome',
-      lis_person_contact_email_primary: profile.email,
-      context_id: discipline.id,
-      context_title: discipline.name,
-      context_label: discipline.name,
-      resource_link_id: learningUnit.id,
-      resource_link_title: learningUnit.name,
-      tool_consumer_instance_guid: 'https://iteqescolas.com.br/',
-      launch_presentation_locale: 'pt-BR',
-      custom_debug: 'true',
-      lti_message_type: 'basic-lti-launch-request',
-      lti_version: 'LTI-1p0',
-      oauth_consumer_key: SAGAH_KEY,
-      oauth_nonce: crypto.randomUUID(),
-      oauth_signature_method: 'HMAC-SHA1',
-      oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-      oauth_version: '1.0',
-      oauth_callback: 'about:blank',
-    };
+    const sagahKey = Deno.env.get('SAGAH_LTI_KEY')!;
+    const sagahSecret = Deno.env.get('SAGAH_LTI_SECRET')!;
+    const sagahLaunchUrl = `https://api.plataforma.grupoa.education/v2/safea-client/auth/launch/lti/ies/iteq_prod/application/gaia-lite?contentId=${learningUnit.sagah_content_id}`;
 
     const oauth = new OAuth({
-      consumer: { key: SAGAH_KEY, secret: SAGAH_SECRET },
+      consumer: { key: sagahKey, secret: sagahSecret },
       signature_method: 'HMAC-SHA1',
-      hash_function(base_string, key) {
+      async hash_function(base_string, key) {
         const encoder = new TextEncoder();
-        const keyBytes = encoder.encode(key);
-        const baseBytes = encoder.encode(base_string);
-        
-        return crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-1' }, true, ['sign'])
-          .then(signingKey => crypto.subtle.sign('HMAC', signingKey, baseBytes))
-          .then(signature => btoa(String.fromCharCode(...new Uint8Array(signature))));
+        const cryptoKey = await crypto.subtle.importKey("raw", encoder.encode(key), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+        const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(base_string));
+        return bufferToBase64(signatureBuffer);
       },
     });
 
-    const signature = await oauth.get_signature('POST', SAGAH_LAUNCH_URL, launchParams);
-    console.log(`log: Assinatura gerada com sucesso: ${signature}`);
-
-    const finalLaunchData = {
-      ...launchParams,
-      oauth_signature: signature,
+    // log: CORREÇÃO - Removida a linha 'resource_link_id' do corpo da requisição.
+    const requestBodyData = {
+      user_id: profile.id,
+      roles: "urn:lti:role:ims/lis/Learner",
+      resource_link_title: learningUnit.name,
+      lis_person_name_full: profile.full_name,
+      lis_person_contact_email_primary: profile.email,
+      context_id: learningUnit.discipline.id,
+      context_title: learningUnit.discipline.name,
+      lti_message_type: 'basic-lti-launch-request',
+      lti_version: 'LTI-1p0',
+      oauth_callback: 'about:blank',
     };
-    
-    const finalLaunchUrl = `${SAGAH_LAUNCH_URL}?contentId=${encodeURIComponent(learningUnit.sagah_content_id)}`;
-    console.log(`log: URL de lançamento final: ${finalLaunchUrl}`);
-    
-    return new Response(
-      JSON.stringify({
-        launchUrl: finalLaunchUrl,
-        launchData: finalLaunchData,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
 
-  } catch (err) {
-    console.error('log: Erro na execução da função:', err);
-    return new Response(String(err?.message ?? err), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
+    const requestData = { url: sagahLaunchUrl, method: 'POST', data: requestBodyData };
+    const signedParams = await oauth.authorize(requestData);
+
+    const responsePayload = { launch_url: sagahLaunchUrl, params: signedParams };
+    return handleResponse(responsePayload);
+
+  } catch (error) {
+    console.error('Erro na função generate-sagah-launch:', error.message);
+    return handleResponse({ error: error.message }, 400);
   }
 });
