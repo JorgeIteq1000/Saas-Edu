@@ -119,12 +119,15 @@ serve(async (req) => {
     params['oauth_signature'] = signature;
     delete params['contentId']; // Remove o contentId do corpo do form, pois já vai na URL
     
-    // Resposta final para o frontend
+    console.log("🚀 Parâmetros de Lançamento LTI Gerados:");
+    console.log("URL de Retorno da Nota:", params.lis_outcome_service_url);
+    console.log("ID do Resultado:", params.lis_result_sourcedid);
+
     const responsePayload = { 
       launch_url: finalLaunchUrl,
       params: params
     };
-    
+
     return handleResponse(responsePayload);
 
   } catch (error) {

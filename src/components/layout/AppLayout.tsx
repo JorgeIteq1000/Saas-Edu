@@ -68,7 +68,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           <header className="h-16 border-b border-border bg-card flex items-center px-6 shadow-soft">
             <SidebarTrigger className="mr-4 md:hidden" />
             <div className="flex-1">
-              <h1 className="text-lg font-semibold">GradGate - Sistema de Gestão Acadêmica</h1>
+              <h1 className="text-lg font-semibold">Quality Educacional - Sistema de Gestão Acadêmica</h1>
             </div>
           </header>
           

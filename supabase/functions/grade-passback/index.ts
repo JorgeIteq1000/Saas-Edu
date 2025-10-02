@@ -1,10 +1,11 @@
-// VERSÃO FINAL - PRONTA PARA O SAGAH
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// supabase/functions/grade-passback/index.ts
+
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { parse } from 'https://deno.land/x/xml/mod.ts';
 
 // --- CONFIGURAÇÃO ---
-const TEST_MODE = false; // ⚠️ MUDAR PARA false EM PRODUÇÃO!
+const TEST_MODE = false; // ⚠️ Certifique-se que está 'false' em produção!
 
 // --- FUNÇÕES OAUTH (OBRIGATÓRIAS PARA SAGAH) ---
 function bufferToBase64(buffer: ArrayBuffer): string {
@@ -24,7 +25,6 @@ function rawurlencode(str: string): string {
 }
 
 async function validateOAuthSignature(req: Request, body: string, secret: string): Promise<boolean> {
-    // ⚠️ EM PRODUÇÃO, SEMPRE VALIDAR OAUTH!
     if (TEST_MODE) {
         console.log("log: 🧪 MODO TESTE - OAuth bypassado");
         return true;
@@ -65,7 +65,6 @@ async function validateOAuthSignature(req: Request, body: string, secret: string
         const calculatedSignature = bufferToBase64(signatureBuffer);
 
         return receivedSignature === calculatedSignature;
-
     } catch (error) {
         console.error("log: 💥 Erro na validação OAuth:", error);
         return false;
@@ -73,10 +72,10 @@ async function validateOAuthSignature(req: Request, body: string, secret: string
 }
 
 // --- RESPOSTA XML (OBRIGATÓRIA PARA SAGAH) ---
-function createSuccessXML(requestMessageIdentifier: string, sourcedId: string, score: number) {
+function createSuccessXML(requestMessageIdentifier: string, sourcedId: string, score: number): string {
     const responseMessageIdentifier = `response-${Date.now()}`;
     return `<?xml version="1.0" encoding="UTF-8"?>
-<imsx_POXEnvelopeResponse xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
+<imsx_POXEnvelopeResponse xmlns="http://www.imsglobal.org/services/ltivp1/xsd/imsoms_v1p0">
     <imsx_POXHeader>
         <imsx_POXResponseHeaderInfo>
             <imsx_version>V1.0</imsx_version>
@@ -96,7 +95,7 @@ function createSuccessXML(requestMessageIdentifier: string, sourcedId: string, s
 </imsx_POXEnvelopeResponse>`;
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     console.log("log: 📨 Recebida requisição LTI");
     
     if (req.method !== 'POST') {
@@ -107,7 +106,6 @@ serve(async (req) => {
         const requestBody = await req.text();
         console.log("log: 📝 Body recebido");
 
-        // ⚠️ VALIDAÇÃO OAUTH OBRIGATÓRIA
         const sagahSecret = Deno.env.get('SAGAH_LTI_SECRET');
         if (!sagahSecret) {
             throw new Error("SAGAH_LTI_SECRET não configurada");
@@ -121,17 +119,15 @@ serve(async (req) => {
         
         console.log("log: ✅ Assinatura OAuth validada!");
 
-        // PROCESSAMENTO DO XML
         const xml = parse(requestBody);
         
-        const sourcedId = xml?.imsx_POXEnvelopeRequest?.imsx_POXBody?.replaceResultRequest?.resultRecord?.sourcedGUID?.sourcedId;
-        const scoreText = xml?.imsx_POXEnvelopeRequest?.imsx_POXBody?.replaceResultRequest?.resultRecord?.result?.resultScore?.textString;
-        const requestMessageIdentifier = xml?.imsx_POXEnvelopeRequest?.imsx_POXHeader?.imsx_POXRequestHeaderInfo?.imsx_messageIdentifier;
+        const sourcedId = xml?.imsx_POXEnvelopeRequest?.imsx_POXBody?.replaceResultRequest?.resultRecord?.sourcedGUID?.sourcedId as string;
+        const scoreText = xml?.imsx_POXEnvelopeRequest?.imsx_POXBody?.replaceResultRequest?.resultRecord?.result?.resultScore?.textString as string;
+        const requestMessageIdentifier = xml?.imsx_POXEnvelopeRequest?.imsx_POXHeader?.imsx_POXRequestHeaderInfo?.imsx_messageIdentifier as string;
         
         console.log("log: 📊 Dados extraídos:", { sourcedId, scoreText });
 
-        // VALIDAÇÕES
-        if (typeof sourcedId !== 'string') throw new Error("sourcedId inválido");
+        if (!sourcedId) throw new Error("sourcedId inválido");
         if (!scoreText || isNaN(parseFloat(scoreText))) throw new Error(`Score inválido: ${scoreText}`);
 
         const score = parseFloat(scoreText);
@@ -140,7 +136,6 @@ serve(async (req) => {
 
         console.log(`log: 👤 Processando nota ${grade} para aluno ${studentProfileId}`);
 
-        // BANCO DE DADOS
         const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL')!, 
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -155,14 +150,14 @@ serve(async (req) => {
         if (disciplineError) throw disciplineError;
 
         const { error: upsertError } = await supabaseAdmin
-            .from('student_grades')
+            .from('student_grades') // <-- NOME DA TABELA CORRETO
             .upsert({
                 enrollment_id: enrollmentId,
                 learning_unit_id: learningUnitId,
                 student_id: studentProfileId,
                 discipline_id: disciplineData.discipline_id,
                 grade: grade,
-                attempt_number: 1
+                attempt_number: 1 // Ou sua lógica para número de tentativas
             }, { 
                 onConflict: 'student_id,learning_unit_id,attempt_number' 
             });
@@ -171,7 +166,6 @@ serve(async (req) => {
 
         console.log("log: ✅ Nota salva com sucesso!");
 
-        // ⚠️ RESPOSTA XML OBRIGATÓRIA PARA SAGAH
         const successResponseXML = createSuccessXML(requestMessageIdentifier, sourcedId, score);
         return new Response(successResponseXML, { 
             headers: { 'Content-Type': 'application/xml' } 
@@ -180,7 +174,7 @@ serve(async (req) => {
     } catch (error) {
         console.error("log: 💥 Erro:", error.message);
         const errorResponseXML = `<?xml version="1.0" encoding="UTF-8"?>
-<imsx_POXEnvelopeResponse xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
+<imsx_POXEnvelopeResponse xmlns="http://www.imsglobal.org/services/ltivp1/xsd/imsoms_v1p0">
     <imsx_POXHeader>
         <imsx_POXResponseHeaderInfo>
             <imsx_version>V1.0</imsx_version>
