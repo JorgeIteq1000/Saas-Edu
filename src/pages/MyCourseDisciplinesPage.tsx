@@ -6,11 +6,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowLeft, Check, X } from 'lucide-react';
+import { Loader2, ArrowLeft, Check, X, BookOpen } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Progress } from "@/components/ui/progress";
+import { Badge } from '@/components/ui/badge';
+import SagahLaunchButton from '@/components/learning/SagahLaunchButton'; // Importe o botão
 
-// Interfaces
+// Interfaces (sem alteração)
 interface Grade {
   learning_unit_id: string;
   grade: number;
@@ -41,10 +42,10 @@ const MyCourseDisciplinesPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // A lógica de busca de dados permanece a mesma
     const fetchDisciplinesAndGrades = async () => {
       if (!enrollmentId) return;
       try {
-        // 1. Buscar dados da matrícula e do curso
         const { data: enrollmentData, error: enrollmentError } = await supabase
           .from('enrollments')
           .select('course_id, student_id, courses(name)')
@@ -52,7 +53,6 @@ const MyCourseDisciplinesPage = () => {
           .single();
         if (enrollmentError) throw enrollmentError;
 
-        // 2. Buscar disciplinas e UAs do curso
         const { data: disciplinesData, error: disciplinesError } = await supabase
           .from('course_disciplines')
           .select('discipline:disciplines(id, name, learning_units(id, name))')
@@ -61,17 +61,13 @@ const MyCourseDisciplinesPage = () => {
 
         let disciplines = disciplinesData.map((item: any) => item.discipline).filter(Boolean);
 
-        // --- MOCK DE NOTAS (SUBSTITUIR QUANDO TIVER DADOS REAIS) ---
-        // No futuro, aqui você faria a busca na tabela 'student_grades'
         const mockGrades: Grade[] = disciplines.flatMap((d: Discipline) => 
             d.learning_units.map(ua => ({
                 learning_unit_id: ua.id,
-                grade: parseFloat((Math.random() * 5 + 5).toFixed(1)) // Nota aleatória entre 5.0 e 10.0
+                grade: parseFloat((Math.random() * 5 + 5).toFixed(1))
             }))
         );
-        // --- FIM DO MOCK ---
         
-        // 3. Associar notas e calcular médias
         disciplines.forEach((discipline: Discipline) => {
             let totalGrade = 0;
             let gradedUnits = 0;
@@ -105,7 +101,7 @@ const MyCourseDisciplinesPage = () => {
   const GradeIndicator = ({ grade }: { grade: number }) => {
     const isApproved = grade >= PASSING_GRADE;
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 w-24 justify-end">
         <span className={`font-bold text-lg ${isApproved ? 'text-green-600' : 'text-red-600'}`}>
           {grade.toFixed(1)}
         </span>
@@ -160,9 +156,16 @@ const MyCourseDisciplinesPage = () => {
                 <AccordionContent>
                   <div className="space-y-3 pl-4 border-l-2 ml-2">
                     {discipline.learning_units.length > 0 ? discipline.learning_units.map(ua => (
+                      // --- ESTRUTURA DA LINHA DA UA ALTERADA AQUI ---
                       <div key={ua.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
-                        <span>{ua.name}</span>
-                        {ua.grade ? <GradeIndicator grade={ua.grade.grade} /> : <Badge variant="secondary">Aguardando</Badge>}
+                        <span className="flex-1">{ua.name}</span>
+                        <div className="flex items-center gap-6">
+                          {ua.grade ? <GradeIndicator grade={ua.grade.grade} /> : <Badge variant="secondary" className="w-24 justify-center">Aguardando</Badge>}
+                          <SagahLaunchButton learningUnitId={ua.id} size="sm">
+                            <BookOpen className="mr-2 h-4 w-4" />
+                            Estudar
+                          </SagahLaunchButton>
+                        </div>
                       </div>
                     )) : <p className="text-sm text-muted-foreground p-2">Nenhuma Unidade de Aprendizagem nesta disciplina.</p>}
                   </div>
