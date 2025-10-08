@@ -58,7 +58,7 @@ const PillarsTab = ({ data }: { data: PillarsData | null }) => {
             <p className="font-semibold">{title}</p>
             {value !== undefined && total !== undefined && <p className="text-2xl font-bold">{value}/{total}</p>}
             {status && <p className={`text-xl font-bold ${status === 'Entregue' ? 'text-green-600' : 'text-amber-600'}`}>{status}</p>}
-            {date && <p className="text-lg font-bold">{format(new Date(date), 'dd/MM/yyyy')}</p>}
+            {date && date !== null && <p className="text-lg font-bold">{format(new Date(date), 'dd/MM/yyyy')}</p>}
           </div>
         </div>
       </CardContent>
@@ -81,9 +81,6 @@ const PillarsTab = ({ data }: { data: PillarsData | null }) => {
     </Card>
   );
 };
-
-
-// --- O RESTO DO ARQUIVO (com pequenas modificações) ---
 
 const DisciplinesTab = ({ enrollmentId }: { enrollmentId: string }) => {
   const [grades, setGrades] = useState<DisciplineGrade[]>([]);
@@ -131,6 +128,7 @@ const FinanceTab = ({ enrollmentId }: { enrollmentId: string }) => {
   );
 };
 
+// LOG: ESTA É A VERSÃO CORRETA QUE USA A FUNÇÃO DO GOOGLE DRIVE
 const OccurrencesTab = ({ enrollmentId }: { enrollmentId: string }) => {
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
@@ -160,28 +158,51 @@ const OccurrencesTab = ({ enrollmentId }: { enrollmentId: string }) => {
     if (event.target.files && event.target.files[0]) setImageFile(event.target.files[0]);
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+  }
+
   const handleSaveOccurrence = async () => {
     if (newOccurrence.trim().length === 0) return;
     setSaving(true);
     let imageUrl: string | null = null;
     try {
+      // 1. Faz o upload da imagem para o Google Drive via Edge Function
       if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop();
-        const filePath = `${enrollmentId}/${new Date().getTime()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('occurrence_images').upload(filePath, imageFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from('occurrence_images').getPublicUrl(filePath);
-        imageUrl = urlData.publicUrl;
+        const fileContent = await fileToBase64(imageFile);
+        console.log("log: Invocando função 'upload-to-drive'");
+        const { data, error: functionError } = await supabase.functions.invoke('upload-to-drive', {
+            body: {
+                fileContent,
+                contentType: imageFile.type,
+                fileName: imageFile.name
+            }
+        });
+
+        if (functionError) throw new Error(functionError.message);
+        if (data.error) throw new Error(data.error);
+        
+        imageUrl = data.imageUrl;
+        console.log("log: URL retornada do Google Drive:", imageUrl);
       }
+
+      // 2. Insere a ocorrência no banco de dados com o link do Google Drive
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from('profiles').select('id').eq('user_id', user?.id).single();
       const { error: insertError } = await supabase.from('enrollment_occurrences').insert({ enrollment_id: enrollmentId, description: newOccurrence.trim(), created_by: profile?.id, image_url: imageUrl });
       if (insertError) throw insertError;
+      
       toast({ title: "Sucesso", description: "Ocorrência registrada." });
       setNewOccurrence('');
       setImageFile(null);
       if(fileInputRef.current) fileInputRef.current.value = "";
       await fetchOccurrences();
+
     } catch (error: any) {
       console.error("log: Erro ao salvar ocorrência:", error);
       toast({ title: "Erro", description: error.message || "Não foi possível salvar a ocorrência.", variant: "destructive" });
@@ -219,7 +240,7 @@ const OccurrencesTab = ({ enrollmentId }: { enrollmentId: string }) => {
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><User className="h-4 w-4" /></div>
                 <div className="flex-1">
                   <p className="whitespace-pre-wrap">{occ.description}</p>
-                  {occ.image_url && (<a href={occ.image_url} target="_blank" rel="noopener noreferrer" className="mt-2 block"><img src={occ.image_url} alt="Anexo da ocorrência" className="max-w-xs max-h-48 rounded-md border" /></a>)}
+                  {occ.image_url && (<a href={occ.image_url} target="_blank" rel="noopener noreferrer" className="mt-2 block"><img src={occ.image_url.replace('view', 'preview')} alt="Anexo da ocorrência" className="max-w-xs max-h-48 rounded-md border" /></a>)}
                   <p className="text-xs text-muted-foreground mt-2">{occ.author?.full_name || 'Sistema'} - {format(new Date(occ.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                 </div>
               </div>
@@ -231,7 +252,6 @@ const OccurrencesTab = ({ enrollmentId }: { enrollmentId: string }) => {
   );
 };
 
-// Componente Principal da Página
 const EnrollmentCourseDetailsPage = () => {
   const { enrollmentId } = useParams<{ enrollmentId: string }>();
   const { toast } = useToast();
@@ -243,7 +263,6 @@ const EnrollmentCourseDetailsPage = () => {
     if (!enrollmentId) return;
     setLoading(true);
     try {
-      // Busca paralela dos dados da matrícula e dos pilares
       const [enrollmentResult, pillarsResult] = await Promise.all([
         supabase.from('enrollments').select(`id, student:profiles!enrollments_student_id_fkey(id, full_name, email), course:courses!enrollments_course_id_fkey(id, name)`).eq('id', enrollmentId).single(),
         supabase.rpc('get_enrollment_pillars', { p_enrollment_id: enrollmentId }).single()
