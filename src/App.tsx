@@ -1,3 +1,4 @@
+import EnrollmentCourseDetailsPage from './pages/EnrollmentCourseDetailsPage';
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -73,7 +74,7 @@ const App: React.FC = () => {
                 <Route path="/curso/:enrollmentId" element={<CoursePortalPage />} />
                 <Route path="/curso/:enrollmentId/disciplinas" element={<MyCourseDisciplinesPage />} />
                 <Route path="/combos" element={<CombosPage />} /> // LOG: Nova rota para a página de combos.
-
+                <Route path="/matricula-curso/:enrollmentId" element={<AppLayout> <EnrollmentCourseDetailsPage /> </AppLayout> }/> 
 
               </Routes>
             </AppLayout>

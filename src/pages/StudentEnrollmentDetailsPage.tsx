@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'; // Adicione este import no início do arquivo
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -350,7 +351,7 @@ const StudentEnrollmentDetailsPage = () => {
                             </div>
                         )}
                         <p className="text-sm text-muted-foreground mb-4">{enroll.courses?.description || 'Sem descrição.'}</p>
-                        <Button size="sm">Ver Detalhes do Curso</Button>
+                        <Button asChild size="sm"><Link to={`/matricula-curso/${enroll.id}`}>Ver Detalhes do Curso</Link></Button>
                       </CardContent>
                     </Card>
                   ))}
