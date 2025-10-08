@@ -30,6 +30,7 @@ import ReferralsPage from "./pages/ReferralsPage"; // Nova importação
 import UserPermissionsPage from "./pages/UserPermissionsPage"; // Nova importação
 import CoursePortalPage from "./pages/CoursePortalPage"; // Adicione esta linha
 import MyCourseDisciplinesPage from "./pages/MyCourseDisciplinesPage"; // Adicione esta linha
+import CombosPage from './pages/CombosPage'; // Importa a nova página
 
 
 const queryClient = new QueryClient();
@@ -71,6 +72,7 @@ const App: React.FC = () => {
                 <Route path="/user-permissions" element={<UserPermissionsPage />} /> {/* Rota Adicionada */}
                 <Route path="/curso/:enrollmentId" element={<CoursePortalPage />} />
                 <Route path="/curso/:enrollmentId/disciplinas" element={<MyCourseDisciplinesPage />} />
+                <Route path="/combos" element={<CombosPage />} /> // LOG: Nova rota para a página de combos.
 
 
               </Routes>

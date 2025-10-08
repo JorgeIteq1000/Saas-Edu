@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
@@ -27,7 +27,8 @@ import {
   BarChart3,
   Megaphone,
   User,
-  Gift // CORREÇÃO: Ícone importado
+  Gift,
+  PackagePlus, // LOG: Novo ícone para Combos importado.
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -39,7 +40,6 @@ interface Profile {
 
 const AppSidebar = () => {
   const { state } = useSidebar();
-  const location = useLocation();
   const { toast } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
   const { hasPermission } = usePermissions();
@@ -84,14 +84,15 @@ const AppSidebar = () => {
       { title: 'Dashboard', url: '/', icon: Home },
     ];
 
-    // Define all possible menu items with their permissions
+    // LOG: Adicionado o item "Combos" à lista de todos os menus possíveis.
     const allMenuItems = [
       { title: 'Cursos', url: '/courses', icon: BookOpen, permission: 'courses' },
+      { title: 'Combos', url: '/combos', icon: PackagePlus, permission: 'combos' },
       { title: 'Contratos', url: '/contracts', icon: FileText, permission: 'contracts' },
       { title: 'Usuários', url: '/users', icon: Users, permission: 'users' },
       { title: 'Matrículas', url: '/enrollments', icon: UserPlus, permission: 'enrollments' },
       { title: 'Vendas', url: '/sales', icon: TrendingUp, permission: 'sales' },
-      { title: 'Indicações', url: '/referrals', icon: Gift, permission: 'sales' }, // Adicionado aqui, usando a permissão de vendas por enquanto
+      { title: 'Indicações', url: '/referrals', icon: Gift, permission: 'sales' },
       { title: 'Financeiro', url: '/finance', icon: DollarSign, permission: 'finance' },
       { title: 'Protocolos', url: '/protocols', icon: FileText, permission: 'protocols' },
       { title: 'Certificados', url: '/certificates', icon: GraduationCap, permission: 'certificates' },
@@ -101,12 +102,11 @@ const AppSidebar = () => {
       { title: 'Configurações', url: '/settings', icon: Settings, permission: 'settings' },
     ];
 
-    // Filter items based on permissions
+    // Filtra os itens com base nas permissões do usuário.
     const availableItems = allMenuItems.filter(item => 
       hasPermission(item.permission, 'view')
     );
 
-    // Role-specific items that don't require permissions
     const roleSpecificItems = [];
     
     if (role === 'gestor') {

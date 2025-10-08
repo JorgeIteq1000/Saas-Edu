@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'; // Importar useCallback
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface UserPermissions {
@@ -37,11 +37,12 @@ export const usePermissions = () => {
 
         // Se for admin_geral, tem acesso total a tudo
         if (profile.role === 'admin_geral') {
-        const modules = [
-          'users', 'enrollments', 'sales', 'finance', 
-          'protocols', 'settings', 'reports', 'courses', 'certificates',
-          'documents', 'announcements', 'contracts'
-        ];
+          // LOG: CORREÇÃO APLICADA AQUI! Adicionamos 'combos' à lista.
+          const modules = [
+            'users', 'enrollments', 'sales', 'finance', 
+            'protocols', 'settings', 'reports', 'courses', 'certificates',
+            'documents', 'announcements', 'contracts', 'combos' 
+          ];
           
           const adminPermissions: UserPermissions = {};
           modules.forEach(module => {
@@ -87,7 +88,6 @@ export const usePermissions = () => {
     fetchPermissions();
   }, []);
 
-  // Envolver a função hasPermission com useCallback para estabilizar sua referência
   const hasPermission = useCallback((module: string, action: 'view' | 'create' | 'edit' | 'delete') => {
     const modulePermissions = permissions[module];
     if (!modulePermissions) return false;
@@ -104,7 +104,7 @@ export const usePermissions = () => {
       default:
         return false;
     }
-  }, [permissions]); // A dependência agora é o objeto de permissões
+  }, [permissions]);
 
   return {
     permissions,
