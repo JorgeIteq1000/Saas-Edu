@@ -173,7 +173,7 @@ const StudentEnrollmentDetailsPage = () => {
             }
         }
         
-        // LOG: CONSULTA CORRIGIDA E SIMPLIFICADA
+        // LOG: Consulta de matrículas foi CORRIGIDA E SIMPLIFICADA
         const [profileResult, enrollmentsResult, referralsResult] = await Promise.all([
             supabase.from('profiles').select('*').eq('id', studentId).single(),
             supabase.from('enrollments').select(`*, courses(*), combos(*)`).eq('student_id', studentId),
@@ -354,7 +354,7 @@ const StudentEnrollmentDetailsPage = () => {
                       </CardContent>
                     </Card>
                   ))}
-                  {enrollments.length === 0 && <p className="text-center text-muted-foreground py-4">Nenhuma matrícula encontrada.</p>}
+                  {enrollments.length === 0 && <p className="text-center text-muted-foreground py-4">Nenhum curso matriculado.</p>}
                 </CardContent>
               </Card>
             </TabsContent>
