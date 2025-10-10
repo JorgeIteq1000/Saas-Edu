@@ -1049,6 +1049,15 @@ export type CompositeTypes<
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
+  
+export interface CourseType {
+  id: string
+  name: string
+  created_at?: string
+  updated_at?: string
+  required_documents: string[] | null // Adicione esta linha
+}
+
 export const Constants = {
   public: {
     Enums: {

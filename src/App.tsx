@@ -32,6 +32,7 @@ import UserPermissionsPage from "./pages/UserPermissionsPage"; // Nova importaç
 import CoursePortalPage from "./pages/CoursePortalPage"; // Adicione esta linha
 import MyCourseDisciplinesPage from "./pages/MyCourseDisciplinesPage"; // Adicione esta linha
 import CombosPage from './pages/CombosPage'; // Importa a nova página
+import MyDocumentsPage from './pages/MyDocumentsPage'; // 1. Importe a nova página
 
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App: React.FC = () => {
           <SidebarProvider>
             <AppLayout>
               <Routes>
+                <Route path="/my-documents" element={<MyDocumentsPage />} /> {/* 2. Adicione a nova rota aqui */}
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/courses" element={<CoursesPage />} />
