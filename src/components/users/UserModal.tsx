@@ -19,7 +19,7 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
-// log: Adicionando validação de senha, que é opcional na edição de usuário
+// log: Adicionando validação de senha, que é opcional para não quebrar a edição
 const userSchema = z.object({
   full_name: z.string().min(3, 'O nome é obrigatório'),
   email: z.string().email('E-mail inválido'),
@@ -27,10 +27,14 @@ const userSchema = z.object({
   phone: z.string().optional(),
   role: z.enum(['admin_geral', 'gestor', 'vendedor', 'colaborador', 'aluno']),
   active: z.boolean().default(true),
-});
-
-// log: Criando um schema refinado para a criação, onde a senha é obrigatória
-const createUserSchema = userSchema.refine(data => data.password && data.password.length >= 6, {
+}).refine(data => {
+    // log: Se não estiver editando, a senha é obrigatória e deve ter no mínimo 6 caracteres
+    const editingUser = (window as any).editingUser; // Gambiarra para obter o estado de edição
+    if (!editingUser && (!data.password || data.password.length < 6)) {
+        return false;
+    }
+    return true;
+}, {
     message: "A senha é obrigatória e deve ter no mínimo 6 caracteres.",
     path: ["password"],
 });
@@ -56,12 +60,13 @@ const UserModal = ({ open, onOpenChange, onUserSaved, user }: UserModalProps) =>
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const isEditing = !!user;
+  
+  // Usado na validação do Zod
+  (window as any).editingUser = isEditing;
 
-  // log: Escolhendo o schema de validação correto com base se está editando ou criando
-  const currentSchema = isEditing ? userSchema : createUserSchema;
 
   const form = useForm<z.infer<typeof userSchema>>({
-    resolver: zodResolver(currentSchema),
+    resolver: zodResolver(userSchema),
     defaultValues: {
       full_name: '',
       email: '',
@@ -73,9 +78,7 @@ const UserModal = ({ open, onOpenChange, onUserSaved, user }: UserModalProps) =>
   });
 
   useEffect(() => {
-    // log: Redefinindo o formulário quando o modal abre ou o usuário muda
     if (user && open) {
-      console.log("log: Preenchendo formulário para edição.", user);
       form.reset({
         full_name: user.full_name,
         email: user.email,
@@ -84,8 +87,7 @@ const UserModal = ({ open, onOpenChange, onUserSaved, user }: UserModalProps) =>
         active: user.active,
         password: '', // Limpa o campo de senha na edição
       });
-    } else if (!user && open) {
-      console.log("log: Resetando formulário para criação de novo usuário.");
+    } else {
       form.reset({
         full_name: '',
         email: '',
@@ -100,10 +102,9 @@ const UserModal = ({ open, onOpenChange, onUserSaved, user }: UserModalProps) =>
   const onSubmit = async (values: z.infer<typeof userSchema>) => {
     setLoading(true);
     try {
-      if (isEditing && user) {
-        // log: Atualizando usuário existente
-        const { password, ...updateData } = values; // Ignora a senha na atualização
-        console.log("log: Enviando dados para atualização:", updateData);
+      if (isEditing) {
+        // log: Atualizando usuário existente (sem a senha)
+        const { password, ...updateData } = values;
         const { error } = await supabase
           .from('profiles')
           .update(updateData)
@@ -112,22 +113,17 @@ const UserModal = ({ open, onOpenChange, onUserSaved, user }: UserModalProps) =>
         toast({ title: "Sucesso!", description: "Usuário atualizado com sucesso." });
       } else {
         // log: Criando novo usuário invocando a Edge Function
-        const payload = {
-            email: values.email,
-            password: values.password,
-            userData: {
-                full_name: values.full_name,
-                phone: values.phone,
-                role: values.role,
-                active: values.active // <-- CORREÇÃO APLICADA AQUI
-            }
-        };
-        console.log('log: Enviando dados para a função create-user:', payload);
-        
         const { error } = await supabase.functions.invoke('create-user', {
-            body: payload
+            body: {
+                email: values.email,
+                password: values.password,
+                userData: {
+                    full_name: values.full_name,
+                    phone: values.phone,
+                    role: values.role
+                }
+            }
         });
-
         if (error) throw error;
         toast({ title: "Sucesso!", description: "Novo usuário criado com sucesso." });
       }
@@ -244,4 +240,3 @@ const UserModal = ({ open, onOpenChange, onUserSaved, user }: UserModalProps) =>
 };
 
 export default UserModal;
-
