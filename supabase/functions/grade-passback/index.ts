@@ -41,7 +41,7 @@ const createErrorResponse = (messageIdentifier: string, description: string) => 
 
 
 serve(async (req) => {
-  console.log('log: 📬 Requisição recebida em grade-passback...');
+  console.log('log: 📬 Requisição de nota recebida...');
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -58,12 +58,15 @@ serve(async (req) => {
     const sourcedId = parsedXml.imsx_POXEnvelopeRequest.imsx_POXBody.replaceResultRequest.resultRecord.sourcedGUID.sourcedId;
     const score = parseFloat(parsedXml.imsx_POXEnvelopeRequest.imsx_POXBody.replaceResultRequest.resultRecord.result.resultScore.textString);
     
-    console.log('log: ✅ Dados extraídos do XML (com tentativa):', { sourcedId, score });
+    console.log('log: ✅ Dados extraídos do XML:', { sourcedId, score });
 
     const [enrollmentId, learningUnitId, studentId, attempt] = sourcedId.split('::');
     
-    if (!enrollmentId || !learningUnitId || !studentId || !attempt) {
-      throw new Error(`sourcedId em formato de recuperação inválido: ${sourcedId}`);
+    // Se a tentativa não for enviada (padrão antigo), assume a primeira. Essencial para compatibilidade.
+    const attemptNumber = parseInt(attempt || '1', 10);
+    
+    if (!enrollmentId || !learningUnitId || !studentId) {
+      throw new Error(`sourcedId em formato inválido: ${sourcedId}`);
     }
 
     const supabaseAdmin = createClient(
@@ -71,6 +74,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
+    // Busca a disciplina vinculada à Unidade de Aprendizagem
     const { data: learningUnitData, error: unitError } = await supabaseAdmin
       .from('learning_units')
       .select('discipline_id')
@@ -83,28 +87,33 @@ serve(async (req) => {
     const { discipline_id } = learningUnitData;
     const grade = score * 10;
     
-    console.log(`log: 💾 Salvando nota ${grade} para tentativa ${attempt}`);
+    console.log(`log: 💾 Atualizando/Inserindo nota ${grade} para a tentativa ${attemptNumber}`);
 
-    // ===== A CORREÇÃO FINALÍSSIMA ESTÁ AQUI =====
-    // Corrigido de 'attempt_number' para 'attempts' para corresponder à sua tabela.
+    // ===== A LÓGICA FINAL E CORRETA =====
+    // Usamos 'upsert' para permitir que a Sagah atualize a nota da mesma tentativa.
+    // Se for a primeira nota (ex: 0.42 de participação), ele cria o registro.
+    // Se for uma nota posterior (ex: 0.85 final), ele atualiza o registro existente.
     const { error } = await supabaseAdmin
       .from('student_grades')
-      .insert({
+      .upsert({
         enrollment_id: enrollmentId,
         learning_unit_id: learningUnitId,
+        student_id: studentId,
+        attempts: attemptNumber, // Coluna correta do banco de dados
         discipline_id: discipline_id,
         grade: grade,
         provider: 'sagah',
-        student_id: studentId,
-        attempts: parseInt(attempt, 10), // Usando o nome correto e definitivo da coluna
+      }, {
+        // A 'constraint' que define o que é um registro "único"
+        onConflict: 'enrollment_id, learning_unit_id, student_id, attempts'
       });
 
     if (error) {
-      console.error('log: 💥 Erro ao salvar a nota no Supabase:', error);
+      console.error('log: 💥 Erro ao salvar/atualizar a nota no Supabase:', error);
       throw error;
     }
 
-    console.log('log: 🎉 Nota da tentativa salva com sucesso!');
+    console.log('log: 🎉 Nota da tentativa salva/atualizada com sucesso!');
 
     const responseXml = createSuccessResponse(messageIdentifier);
     return new Response(responseXml, {
