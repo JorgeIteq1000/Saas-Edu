@@ -6,24 +6,26 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowLeft, Check, X, BookOpen } from 'lucide-react';
+import { Loader2, ArrowLeft, Check, X, BookOpen, RefreshCw } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from '@/components/ui/badge';
 import SagahLaunchButton from '@/components/learning/SagahLaunchButton';
 
-// Interfaces
+// Interfaces atualizadas para incluir as tentativas
 interface Grade {
   learning_unit_id: string;
   grade: number;
+  attempts: number;
 }
 interface LearningUnit {
   id: string;
   name: string;
-  grade?: Grade;
+  latestGrade?: Grade; // Armazenará a nota da última tentativa
 }
 interface Discipline {
   id: string;
   name: string;
+  recovery_attempts: number; // Campo do PedagogicalModal
   learning_units: LearningUnit[];
   averageGrade?: number;
 }
@@ -43,6 +45,7 @@ const MyCourseDisciplinesPage = () => {
 
   useEffect(() => {
     const fetchDisciplinesAndGrades = async () => {
+      console.log('log: Iniciando busca de dados...');
       if (!enrollmentId) return;
       try {
         const { data: enrollmentData, error: enrollmentError } = await supabase
@@ -52,32 +55,42 @@ const MyCourseDisciplinesPage = () => {
           .single();
         if (enrollmentError) throw enrollmentError;
 
+        // Buscando disciplinas COM o campo recovery_attempts
         const { data: disciplinesData, error: disciplinesError } = await supabase
           .from('course_disciplines')
-          .select('discipline:disciplines(id, name, learning_units(id, name))')
+          .select('discipline:disciplines(id, name, recovery_attempts, learning_units(id, name))')
           .eq('course_id', enrollmentData.course_id);
         if (disciplinesError) throw disciplinesError;
 
         let disciplines = disciplinesData.map((item: any) => item.discipline).filter(Boolean);
+        console.log('log: Disciplinas carregadas:', disciplines);
 
-        // BUSCANDO NOTAS REAIS DO BANCO DE DADOS
+        // Buscando TODAS as tentativas de nota
         const { data: gradesData, error: gradesError } = await supabase
           .from('student_grades')
-          .select('learning_unit_id, grade')
+          .select('learning_unit_id, grade, attempts')
           .eq('enrollment_id', enrollmentId)
           .eq('student_id', enrollmentData.student_id);
 
         if (gradesError) throw gradesError;
+        console.log('log: Histórico de notas carregado:', gradesData);
         
-        // Associar notas e calcular médias
+        // Lógica aprimorada para associar a ÚLTIMA nota e calcular médias
         disciplines.forEach((discipline: Discipline) => {
             let totalGrade = 0;
             let gradedUnits = 0;
             discipline.learning_units.forEach(ua => {
-                const gradeInfo = gradesData.find(g => g.learning_unit_id === ua.id);
-                if (gradeInfo && gradeInfo.grade !== null) {
-                    ua.grade = { learning_unit_id: ua.id, grade: gradeInfo.grade };
-                    totalGrade += gradeInfo.grade;
+                // Filtra todas as notas para esta UA
+                const gradesForUnit = gradesData.filter(g => g.learning_unit_id === ua.id);
+                if (gradesForUnit.length > 0) {
+                    // Ordena para encontrar a tentativa mais recente (maior número de 'attempts')
+                    const latestAttempt = gradesForUnit.sort((a, b) => b.attempts - a.attempts)[0];
+                    ua.latestGrade = { 
+                        learning_unit_id: ua.id, 
+                        grade: latestAttempt.grade, 
+                        attempts: latestAttempt.attempts 
+                    };
+                    totalGrade += latestAttempt.grade;
                     gradedUnits++;
                 }
             });
@@ -92,7 +105,7 @@ const MyCourseDisciplinesPage = () => {
         });
 
       } catch (error: any) {
-        console.error("log: Erro ao buscar disciplinas/notas:", error);
+        console.error("log: 💥 Erro ao buscar disciplinas/notas:", error);
         toast({ title: "Erro", description: "Não foi possível carregar as disciplinas.", variant: "destructive" });
       } finally {
         setLoading(false);
@@ -158,25 +171,43 @@ const MyCourseDisciplinesPage = () => {
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-3 pl-4 border-l-2 ml-2">
-                    {discipline.learning_units.length > 0 ? discipline.learning_units.map(ua => (
-                      <div key={ua.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
-                        <span className="flex-1">{ua.name}</span>
-                        <div className="flex items-center gap-6">
-                          {ua.grade ? <GradeIndicator grade={ua.grade.grade} /> : <Badge variant="secondary" className="w-24 justify-center">Aguardando</Badge>}
-                          
-                          {/* BOTÃO ATUALIZADO COM enrollmentId */}
-                          <SagahLaunchButton 
-                            learningUnitId={ua.id} 
-                            enrollmentId={enrollmentId!} // Passando o ID da matrícula
-                            size="sm"
-                          >
-                            <BookOpen className="mr-2 h-4 w-4" />
-                            Estudar
-                          </SagahLaunchButton>
+                    {discipline.learning_units.length > 0 ? discipline.learning_units.map(ua => {
+                        const { latestGrade } = ua;
+                        const attemptsMade = latestGrade?.attempts ?? 0;
+                        const totalAttemptsAllowed = 1 + (discipline.recovery_attempts ?? 0);
+                        const isApproved = latestGrade && latestGrade.grade >= PASSING_GRADE;
+                        const needsRecovery = latestGrade && !isApproved;
+                        const hasAttemptsLeft = attemptsMade < totalAttemptsAllowed;
+                        const canAttemptRecovery = needsRecovery && hasAttemptsLeft;
 
-                        </div>
-                      </div>
-                    )) : <p className="text-sm text-muted-foreground p-2">Nenhuma Unidade de Aprendizagem nesta disciplina.</p>}
+                        return (
+                            <div key={ua.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                                <span className="flex-1">{ua.name}</span>
+                                <div className="flex items-center gap-6">
+                                    {latestGrade ? <GradeIndicator grade={latestGrade.grade} /> : <Badge variant="secondary" className="w-24 justify-center">Aguardando</Badge>}
+                                    
+                                    <SagahLaunchButton 
+                                        learningUnitId={ua.id} 
+                                        enrollmentId={enrollmentId!}
+                                        size="sm"
+                                        disabled={isApproved || (needsRecovery && !hasAttemptsLeft)}
+                                    >
+                                        {canAttemptRecovery ? (
+                                            <>
+                                                <RefreshCw className="mr-2 h-4 w-4" />
+                                                Recuperação
+                                            </>
+                                        ) : (
+                                            <>
+                                                <BookOpen className="mr-2 h-4 w-4" />
+                                                Estudar
+                                            </>
+                                        )}
+                                    </SagahLaunchButton>
+                                </div>
+                            </div>
+                        )
+                    }) : <p className="text-sm text-muted-foreground p-2">Nenhuma Unidade de Aprendizagem nesta disciplina.</p>}
                   </div>
                 </AccordionContent>
               </AccordionItem>

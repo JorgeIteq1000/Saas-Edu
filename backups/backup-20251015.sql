@@ -20,6 +20,11 @@ CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
 
 
 
+
+
+ALTER SCHEMA "public" OWNER TO "postgres";
+
+
 COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
@@ -1061,6 +1066,7 @@ CREATE TABLE IF NOT EXISTS "public"."student_grades" (
     "learning_unit_id" "uuid" NOT NULL,
     "grade" numeric(4,2),
     "attempt_number" integer DEFAULT 1 NOT NULL,
+    "provider" "text",
     CONSTRAINT "student_grades_grade_check" CHECK ((("grade" >= 0.00) AND ("grade" <= 10.00)))
 );
 
@@ -1284,7 +1290,7 @@ ALTER TABLE ONLY "public"."student_documents"
 
 
 ALTER TABLE ONLY "public"."student_grades"
-    ADD CONSTRAINT "student_grades_pkey" PRIMARY KEY ("id");
+    ADD CONSTRAINT "student_grades_pkey" PRIMARY KEY ("enrollment_id", "learning_unit_id", "student_id");
 
 
 
@@ -2189,7 +2195,8 @@ ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
 
 
 
-GRANT USAGE ON SCHEMA "public" TO "postgres";
+REVOKE USAGE ON SCHEMA "public" FROM PUBLIC;
+GRANT ALL ON SCHEMA "public" TO PUBLIC;
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
@@ -2674,9 +2681,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQ
 
 
 
-
-
-
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "postgres";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "authenticated";
@@ -2684,16 +2688,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUN
 
 
 
-
-
-
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "postgres";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
-
 
 
 

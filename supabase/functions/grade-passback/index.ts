@@ -4,26 +4,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-// Funções de utilidade
-function bufferToBase64(buffer: ArrayBuffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function rawurlencode(str: string): string {
-  return encodeURIComponent(str)
-    .replace(/!/g, '%21')
-    .replace(/'/g, '%27')
-    .replace(/\(/g, '%28')
-    .replace(/\)/g, '%29')
-    .replace(/\*/g, '%2A');
-}
-
-// Templates de resposta XML
+// Templates de resposta XML (inalterados)
 const createSuccessResponse = (messageIdentifier: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <imsx_POXEnvelopeResponse xmlns="http://www.imsglobal.org/services/ltiv1p1/xsd/imsoms_v1p0">
   <imsx_POXHeader>
@@ -61,7 +42,6 @@ const createErrorResponse = (messageIdentifier: string, description: string) => 
 
 serve(async (req) => {
   console.log('log: 📬 Requisição recebida em grade-passback...');
-
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -75,17 +55,15 @@ serve(async (req) => {
 
     messageIdentifier = parsedXml.imsx_POXEnvelopeRequest?.imsx_POXHeader?.imsx_POXRequestHeaderInfo?.imsx_messageIdentifier || 'invalid_xml';
     
-    console.log('log: Corpo da requisição (XML):', xmlBody);
-
     const sourcedId = parsedXml.imsx_POXEnvelopeRequest.imsx_POXBody.replaceResultRequest.resultRecord.sourcedGUID.sourcedId;
     const score = parseFloat(parsedXml.imsx_POXEnvelopeRequest.imsx_POXBody.replaceResultRequest.resultRecord.result.resultScore.textString);
     
-    console.log('log: ✅ Dados extraídos do XML:', { messageIdentifier, sourcedId, score });
+    console.log('log: ✅ Dados extraídos do XML (com tentativa):', { sourcedId, score });
 
-    const [enrollmentId, learningUnitId, studentId] = sourcedId.split('::');
+    const [enrollmentId, learningUnitId, studentId, attempt] = sourcedId.split('::');
     
-    if (!enrollmentId || !learningUnitId || !studentId) {
-      throw new Error(`sourcedId em formato inválido: ${sourcedId}`);
+    if (!enrollmentId || !learningUnitId || !studentId || !attempt) {
+      throw new Error(`sourcedId em formato de recuperação inválido: ${sourcedId}`);
     }
 
     const supabaseAdmin = createClient(
@@ -93,7 +71,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
-    console.log(`log: 🔎 Buscando disciplina para a unidade de aprendizagem: ${learningUnitId}`);
     const { data: learningUnitData, error: unitError } = await supabaseAdmin
       .from('learning_units')
       .select('discipline_id')
@@ -101,30 +78,25 @@ serve(async (req) => {
       .single();
 
     if (unitError) throw unitError;
-    if (!learningUnitData || !learningUnitData.discipline_id) {
-      throw new Error(`Disciplina não encontrada para a unidade de aprendizagem ${learningUnitId}`);
-    }
-    const { discipline_id } = learningUnitData;
-    console.log(`log:  disciplina encontrada: ${discipline_id}`);
-
-    // ===== A CORREÇÃO FINAL ESTÁ AQUI =====
-    // Convertemos a nota para a escala de 0 a 10, que o banco de dados espera.
-    const grade = score * 10;
-    // =====================================
+    if (!learningUnitData) throw new Error(`Unidade de aprendizagem não encontrada: ${learningUnitId}`);
     
-    console.log(`log: 💾 Salvando nota ${grade} para enrollmentId: ${enrollmentId}, learningUnitId: ${learningUnitId}`);
+    const { discipline_id } = learningUnitData;
+    const grade = score * 10;
+    
+    console.log(`log: 💾 Salvando nota ${grade} para tentativa ${attempt}`);
 
+    // ===== A CORREÇÃO FINALÍSSIMA ESTÁ AQUI =====
+    // Corrigido de 'attempt_number' para 'attempts' para corresponder à sua tabela.
     const { error } = await supabaseAdmin
       .from('student_grades')
-      .upsert({
+      .insert({
         enrollment_id: enrollmentId,
         learning_unit_id: learningUnitId,
         discipline_id: discipline_id,
         grade: grade,
-        provider: 'sagah', // Corrigi o typo 'sahag' -> 'sagah'
-        student_id: studentId
-      }, {
-        onConflict: 'enrollment_id, learning_unit_id, student_id' 
+        provider: 'sagah',
+        student_id: studentId,
+        attempts: parseInt(attempt, 10), // Usando o nome correto e definitivo da coluna
       });
 
     if (error) {
@@ -132,7 +104,7 @@ serve(async (req) => {
       throw error;
     }
 
-    console.log('log: 🎉 Nota salva com sucesso no banco de dados!');
+    console.log('log: 🎉 Nota da tentativa salva com sucesso!');
 
     const responseXml = createSuccessResponse(messageIdentifier);
     return new Response(responseXml, {
