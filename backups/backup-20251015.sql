@@ -1065,8 +1065,8 @@ CREATE TABLE IF NOT EXISTS "public"."student_grades" (
     "discipline_id" "uuid" NOT NULL,
     "learning_unit_id" "uuid" NOT NULL,
     "grade" numeric(4,2),
-    "attempt_number" integer DEFAULT 1 NOT NULL,
     "provider" "text",
+    "attempts" integer DEFAULT 1 NOT NULL,
     CONSTRAINT "student_grades_grade_check" CHECK ((("grade" >= 0.00) AND ("grade" <= 10.00)))
 );
 
@@ -1290,12 +1290,12 @@ ALTER TABLE ONLY "public"."student_documents"
 
 
 ALTER TABLE ONLY "public"."student_grades"
-    ADD CONSTRAINT "student_grades_pkey" PRIMARY KEY ("enrollment_id", "learning_unit_id", "student_id");
+    ADD CONSTRAINT "student_grades_pkey" PRIMARY KEY ("id");
 
 
 
 ALTER TABLE ONLY "public"."student_grades"
-    ADD CONSTRAINT "student_grades_student_id_learning_unit_id_attempt_number_key" UNIQUE ("student_id", "learning_unit_id", "attempt_number");
+    ADD CONSTRAINT "student_grades_unique_attempt_per_unit" UNIQUE ("enrollment_id", "learning_unit_id", "student_id", "attempts");
 
 
 
