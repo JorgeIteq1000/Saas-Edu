@@ -33,6 +33,7 @@ import CoursePortalPage from "./pages/CoursePortalPage"; // Adicione esta linha
 import MyCourseDisciplinesPage from "./pages/MyCourseDisciplinesPage"; // Adicione esta linha
 import CombosPage from './pages/CombosPage'; // Importa a nova página
 import MyDocumentsPage from './pages/MyDocumentsPage'; // 1. Importe a nova página
+import EnrollPage from './pages/EnrollPage';
 
 
 const queryClient = new QueryClient();
@@ -77,6 +78,7 @@ const App: React.FC = () => {
                 <Route path="/curso/:enrollmentId/disciplinas" element={<MyCourseDisciplinesPage />} />
                 <Route path="/combos" element={<CombosPage />} /> // LOG: Nova rota para a página de combos.
                 <Route path="/matricula-curso/:enrollmentId" element={<AppLayout> <EnrollmentCourseDetailsPage /> </AppLayout> }/> 
+                <Route path="/matricular" element={<EnrollPage />} /> {/* ADICIONE ESTA LINHA */}
 
               </Routes>
             </AppLayout>

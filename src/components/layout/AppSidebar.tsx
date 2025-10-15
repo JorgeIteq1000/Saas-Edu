@@ -1,3 +1,23 @@
+// src/components/layout/AppSidebar.tsx
+
+import {
+  FilePlus, // Adicionado para o novo link "Matricular"
+  GraduationCap,
+  BookOpen,
+  Users,
+  TrendingUp,
+  FileText,
+  Settings,
+  LogOut,
+  Home,
+  UserPlus,
+  DollarSign,
+  BarChart3,
+  Megaphone,
+  User,
+  Gift,
+  PackagePlus,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,27 +33,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import {
-  GraduationCap,
-  BookOpen,
-  Users,
-  TrendingUp,
-  FileText,
-  Settings,
-  LogOut,
-  Home,
-  UserPlus,
-  DollarSign,
-  BarChart3,
-  Megaphone,
-  User,
-  Gift,
-  PackagePlus, // LOG: Novo ícone para Combos importado.
-} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-
-
 
 interface Profile {
   role: string;
@@ -50,6 +51,7 @@ const AppSidebar = () => {
 
   useEffect(() => {
     const getProfile = async () => {
+      console.log('log: Buscando perfil do usuário para a sidebar...');
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data } = await supabase
@@ -58,6 +60,7 @@ const AppSidebar = () => {
           .eq('user_id', user.id)
           .single();
         setProfile(data);
+        console.log('log: Perfil encontrado:', data?.role);
       }
     };
     getProfile();
@@ -76,17 +79,29 @@ const AppSidebar = () => {
         title: "Logout realizado",
         description: "Até logo!",
       });
+      // A página irá recarregar automaticamente devido ao listener de auth do Supabase
     }
   };
 
   const getMenuItems = () => {
     const role = profile?.role;
     
+    // O link do Dashboard é comum a todos
     const baseItems = [
-      { title: 'Dashboard', url: '/', icon: Home },
+      { title: 'Dashboard', url: '/', icon: Home, show: true },
     ];
 
-    // LOG: Adicionado o item "Combos" à lista de todos os menus possíveis.
+    // ===== NOVO LINK DE MATRÍCULA ADICIONADO AQUI =====
+    const enrollmentLink = { 
+      title: 'Matricular', 
+      url: '/matricular', 
+      icon: FilePlus, 
+      // A condição de exibição é baseada no role do usuário
+      show: role === 'gestor' || role === 'vendedor' 
+    };
+    // ===============================================
+    
+    // Lista de todos os menus possíveis controlados por permissão
     const allMenuItems = [
       { title: 'Cursos', url: '/courses', icon: BookOpen, permission: 'courses' },
       { title: 'Combos', url: '/combos', icon: PackagePlus, permission: 'combos' },
@@ -105,35 +120,33 @@ const AppSidebar = () => {
     ];
 
     // Filtra os itens com base nas permissões do usuário.
-    const availableItems = allMenuItems.filter(item => 
-      hasPermission(item.permission, 'view')
-    );
+    const availableItems = allMenuItems
+        .map(item => ({...item, show: hasPermission(item.permission, 'view')}));
 
+    // Itens específicos para cada role (que não são baseados em permissão)
     const roleSpecificItems = [];
-    
     if (role === 'gestor') {
-      roleSpecificItems.push({ title: 'Equipe', url: '/team', icon: Users });
+      roleSpecificItems.push({ title: 'Equipe', url: '/team', icon: Users, show: true });
     }
-
     if (role === 'vendedor') {
       roleSpecificItems.push(
-        { title: 'Minhas Vendas', url: '/my-sales', icon: TrendingUp },
-        { title: 'Leads', url: '/leads', icon: UserPlus }
+        { title: 'Minhas Vendas', url: '/my-sales', icon: TrendingUp, show: true },
+        { title: 'Leads', url: '/leads', icon: UserPlus, show: true }
       );
     }
-
     if (role === 'aluno') {
       roleSpecificItems.push(
-        { title: 'Minhas Matrículas', url: '/my-enrollments', icon: BookOpen },
-        { title: 'Meus Protocolos', url: '/my-protocols', icon: FileText },
-        { title: 'Meus Certificados', url: '/my-certificates', icon: GraduationCap },
-        { title: 'Documentos', url: '/my-documents', icon: FileText },
-        { title: 'Meus Dados', url: '/my-data', icon: User },
-        { title: 'Indicação Premiada', url: '/my-referrals', icon: Gift }
+        { title: 'Minhas Matrículas', url: '/my-enrollments', icon: BookOpen, show: true },
+        { title: 'Meus Protocolos', url: '/my-protocols', icon: FileText, show: true },
+        { title: 'Meus Certificados', url: '/my-certificates', icon: GraduationCap, show: true },
+        { title: 'Documentos', url: '/my-documents', icon: FileText, show: true },
+        { title: 'Meus Dados', url: '/my-data', icon: User, show: true },
+        { title: 'Indicação Premiada', url: '/my-referrals', icon: Gift, show: true }
       );
     }
 
-    return [...baseItems, ...availableItems, ...roleSpecificItems];
+    // Retorna todos os itens que devem ser mostrados, agora incluindo o link "Matricular"
+    return [...baseItems, enrollmentLink, ...availableItems, ...roleSpecificItems].filter(item => item.show);
   };
 
   const menuItems = getMenuItems();
