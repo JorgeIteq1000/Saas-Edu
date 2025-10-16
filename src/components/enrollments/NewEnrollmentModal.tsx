@@ -1,37 +1,19 @@
+// LOG: Refatoração final para criar matrículas individuais a partir de um combo.
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid'; // Importando a biblioteca para gerar UUIDs
 
-interface Student {
-  id: string;
-  full_name: string;
-  email: string;
-}
-
-interface Course {
-  id: string;
-  name: string;
-  code: string;
-}
+// Interfaces...
+interface Student { id: string; full_name: string; }
+interface Course { id: string; name: string; course_type_id: string; }
+interface Combo { id: string; name: string; }
+interface CourseType { id: string; name: string; }
 
 interface NewEnrollmentModalProps {
   open: boolean;
@@ -42,205 +24,179 @@ interface NewEnrollmentModalProps {
 const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnrollmentModalProps) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    student_id: '',
-    course_id: '',
-    status: 'pendente',
-    enrollment_fee_status: 'pendente',
-  });
+  const [itemType, setItemType] = useState<'course' | 'combo'>('course');
+  const [comboCourseTypes, setComboCourseTypes] = useState<CourseType[]>([]);
+  const [selectedComboCourses, setSelectedComboCourses] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState({ student_id: '', selected_item_id: '' });
   const { toast } = useToast();
 
   useEffect(() => {
     if (open) {
+      const fetchData = async () => {
+        const { data: studentsData } = await supabase.from('profiles').select('id, full_name').eq('role', 'aluno');
+        setStudents(studentsData || []);
+        const { data: coursesData } = await supabase.from('courses').select('id, name, course_type_id');
+        setCourses(coursesData || []);
+        const { data: combosData } = await supabase.from('combos').select('id, name').eq('is_active', true);
+        setCombos(combosData || []);
+      };
       fetchData();
+    } else {
+        // Limpa o estado quando o modal fecha
+        setFormData({ student_id: '', selected_item_id: ''});
+        setItemType('course');
+        setComboCourseTypes([]);
+        setSelectedComboCourses({});
     }
   }, [open]);
 
-  const fetchData = async () => {
-    try {
-      // Buscar alunos
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .eq('role', 'aluno')
-        .order('full_name');
+  useEffect(() => {
+    const fetchComboDetails = async () => {
+      if (itemType === 'combo' && formData.selected_item_id) {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('combo_course_types')
+          .select('course_types(id, name)')
+          .eq('combo_id', formData.selected_item_id);
+        if (error) {
+          toast({ title: 'Erro', description: 'Não foi possível buscar os detalhes do combo.', variant: 'destructive' });
+          setComboCourseTypes([]);
+        } else {
+          const types = data.map((item: any) => item.course_types).flat();
+          setComboCourseTypes(types as CourseType[]);
+        }
+        setLoading(false);
+      } else {
+        setComboCourseTypes([]);
+      }
+    };
+    fetchComboDetails();
+  }, [itemType, formData.selected_item_id, toast]);
 
-      if (studentsError) throw studentsError;
-
-      // Buscar cursos
-      const { data: coursesData, error: coursesError } = await supabase
-        .from('courses')
-        .select('id, name, code')
-        .order('name');
-
-      if (coursesError) throw coursesError;
-
-      setStudents(studentsData || []);
-      setCourses(coursesData || []);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar dados para nova matrícula",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.student_id || !formData.course_id) {
-      toast({
-        title: "Erro",
-        description: "Por favor, selecione um aluno e um curso",
-        variant: "destructive",
-      });
+    setLoading(true);
+
+    if (!formData.student_id || !formData.selected_item_id) {
+      toast({ title: "Erro", description: "Selecione um aluno e um item.", variant: "destructive" });
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-
     try {
-      // O número da matrícula será gerado automaticamente pelo trigger
-      // Criar matrícula
-      const { error: enrollmentError } = await supabase
-        .from('enrollments')
-        .insert([{
-          enrollment_number: '', // Será preenchido pelo trigger
-          student_id: formData.student_id,
-          course_id: formData.course_id,
-          status: formData.status as any,
-          enrollment_fee_status: formData.enrollment_fee_status as any,
-          enrollment_date: new Date().toISOString(),
-        }]);
+        if (itemType === 'course') {
+            // Lógica para curso individual (inalterada)
+            const { error } = await supabase.from('enrollments').insert({
+                student_id: formData.student_id,
+                course_id: formData.selected_item_id,
+                status: 'pendente',
+                enrollment_fee_status: 'pendente',
+                enrollment_number: '',
+                enrollment_date: new Date().toISOString(),
+            });
+            if (error) throw error;
+        } else {
+            // LOG: Nova lógica para combos
+            const allTypesSelected = comboCourseTypes.every(type => selectedComboCourses[type.id]);
+            if (!allTypesSelected || comboCourseTypes.length === 0) {
+                toast({ title: "Erro", description: "Selecione um curso para cada tipo do combo.", variant: "destructive" });
+                setLoading(false);
+                return;
+            }
 
-      if (enrollmentError) throw enrollmentError;
+            const package_id = uuidv4(); // Gera um ID único para este pacote de matrículas
+            const selectedCourseIds = Object.values(selectedComboCourses);
 
-      toast({
-        title: "Sucesso",
-        description: "Matrícula criada com sucesso!",
-      });
+            const enrollmentsToInsert = selectedCourseIds.map(courseId => ({
+                student_id: formData.student_id,
+                course_id: courseId,
+                combo_id: formData.selected_item_id, // Rastreia qual combo originou esta matrícula
+                package_id: package_id, // Agrupa todas estas matrículas
+                status: 'pendente',
+                enrollment_fee_status: 'pendente',
+                enrollment_number: '',
+                enrollment_date: new Date().toISOString(),
+            }));
+            
+            const { error } = await supabase.from('enrollments').insert(enrollmentsToInsert);
+            if (error) throw error;
+        }
 
-      // Reset form
-      setFormData({
-        student_id: '',
-        course_id: '',
-        status: 'pendente',
-        enrollment_fee_status: 'pendente',
-      });
+        toast({ title: "Sucesso", description: "Matrícula(s) criada(s) com sucesso!" });
+        onEnrollmentCreated();
+        onOpenChange(false);
 
-      onEnrollmentCreated();
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Erro ao criar matrícula:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao criar matrícula. Tente novamente.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+        toast({ title: "Erro", description: `Falha ao criar matrícula: ${error.message}`, variant: "destructive" });
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      {/* O JSX do formulário continua o mesmo */}
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Nova Matrícula</DialogTitle>
-          <DialogDescription>
-            Crie uma nova matrícula para um aluno em um curso.
-          </DialogDescription>
+          <DialogDescription>Crie uma nova matrícula para um aluno.</DialogDescription>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="student">Aluno</Label>
-            <Select
-              value={formData.student_id}
-              onValueChange={(value) => setFormData({ ...formData, student_id: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um aluno" />
-              </SelectTrigger>
+            <Label>Aluno</Label>
+            <Select value={formData.student_id} onValueChange={(v) => setFormData(p => ({ ...p, student_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione um aluno" /></SelectTrigger>
+                <SelectContent>{students.map(s => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Tipo</Label>
+            <Select value={itemType} onValueChange={(v: 'course'|'combo') => { setItemType(v); setFormData(p => ({ ...p, selected_item_id: '' })); setSelectedComboCourses({}); }}>
+                <SelectTrigger><SelectValue/></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="course">Curso Individual</SelectItem>
+                    <SelectItem value="combo">Combo</SelectItem>
+                </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>{itemType === 'course' ? 'Curso' : 'Combo'}</Label>
+            <Select value={formData.selected_item_id} onValueChange={(v) => { setFormData(p => ({ ...p, selected_item_id: v })); setSelectedComboCourses({}); }}>
+              <SelectTrigger><SelectValue placeholder={`Selecione um ${itemType}`} /></SelectTrigger>
               <SelectContent>
-                {students.map((student) => (
-                  <SelectItem key={student.id} value={student.id}>
-                    {student.full_name} ({student.email})
-                  </SelectItem>
-                ))}
+                {itemType === 'course' 
+                  ? courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)
+                  // @ts-ignore
+                  : combos.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="course">Curso</Label>
-            <Select
-              value={formData.course_id}
-              onValueChange={(value) => setFormData({ ...formData, course_id: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um curso" />
-              </SelectTrigger>
-              <SelectContent>
-                {courses.map((course) => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.name} ({course.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="status">Status da Matrícula</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) => setFormData({ ...formData, status: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {/* CORREÇÃO APLICADA AQUI */}
-                <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="ativa">Ativa/Matriculado</SelectItem>
-                <SelectItem value="trancada">Trancada</SelectItem>
-                <SelectItem value="cancelada">Cancelada</SelectItem>
-                <SelectItem value="concluida">Concluída</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="payment-status">Status do Pagamento</Label>
-            <Select
-              value={formData.enrollment_fee_status}
-              onValueChange={(value) => setFormData({ ...formData, enrollment_fee_status: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="pago">Pago</SelectItem>
-                <SelectItem value="cancelado">Cancelado</SelectItem>
-                <SelectItem value="vencido">Vencido</SelectItem> {/* Corrigido de em_atraso para vencido */}
-              </SelectContent>
-            </Select>
-          </div>
-
+          {itemType === 'combo' && comboCourseTypes.length > 0 && (
+            <div className="p-4 border rounded-md space-y-4">
+              <h4 className="font-medium text-center">Selecione os Cursos do Combo</h4>
+              {loading && <p>Carregando opções...</p>}
+              {!loading && comboCourseTypes.map(type => (
+                <div key={type.id} className="space-y-2">
+                  <Label>{type.name}</Label>
+                  <Select
+                    value={selectedComboCourses[type.id] || ''}
+                    onValueChange={courseId => setSelectedComboCourses(prev => ({...prev, [type.id]: courseId}))}
+                  >
+                    <SelectTrigger><SelectValue placeholder={`Selecione um curso de ${type.name}`} /></SelectTrigger>
+                    <SelectContent>
+                      {courses.filter(c => c.course_type_id === type.id).map(course => (
+                        <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          )}
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Criar Matrícula

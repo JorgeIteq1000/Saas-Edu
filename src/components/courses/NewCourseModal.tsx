@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
-// log: CORREÇÃO - O schema agora representa os DADOS DO FORMULÁRIO, sem o campo 'course_type' que será derivado.
 const formSchema = z.object({
   name: z.string().min(3, 'O nome do curso é obrigatório'),
   code: z.string().optional(),
@@ -107,38 +106,11 @@ const NewCourseModal = ({ open, onOpenChange, onCourseCreated }: NewCourseModalP
     }
   }, [open, toast]);
 
-  // log: CORREÇÃO - Reintroduzida a lógica para derivar o 'course_type' (enum) a partir do 'course_type_id' (uuid).
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     try {
-      const selectedCourseType = courseTypes.find(ct => ct.id === values.course_type_id);
-      if (!selectedCourseType) {
-        throw new Error("Tipo de curso selecionado é inválido.");
-      }
+      const { error } = await supabase.from('courses').insert([values]);
       
-      const courseTypeMap: { [key: string]: string } = {
-        'graduação': 'graduacao',
-        'pós-graduação': 'pos_graduacao',
-        'especialização': 'especializacao',
-        'extensão': 'extensao',
-        'técnico': 'tecnico',
-        'livre': 'livre',
-      };
-      
-      const courseTypeName = selectedCourseType.name.toLowerCase();
-      const enumCourseType = courseTypeMap[courseTypeName];
-
-      if (!enumCourseType) {
-        throw new Error(`O tipo de curso "${selectedCourseType.name}" não é um valor de enum válido no banco de dados.`);
-      }
-
-      // Cria o objeto final para inserção, adicionando o campo 'course_type' obrigatório.
-      const dataToInsert = {
-        ...values,
-        course_type: enumCourseType,
-      };
-
-      const { error } = await supabase.from('courses').insert([dataToInsert]);
       if (error) throw error;
       
       toast({ title: "Sucesso!", description: "Novo curso criado com sucesso." });

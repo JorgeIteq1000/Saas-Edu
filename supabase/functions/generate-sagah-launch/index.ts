@@ -3,13 +3,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Headers para CORS
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Função para converter ArrayBuffer para Base64
 function bufferToBase64(buffer: ArrayBuffer) {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -19,17 +17,10 @@ function bufferToBase64(buffer: ArrayBuffer) {
   return btoa(binary);
 }
 
-// Implementação do rawurlencode do PHP
 function rawurlencode(str: string): string {
-  return encodeURIComponent(str)
-    .replace(/!/g, '%21')
-    .replace(/'/g, '%27')
-    .replace(/\(/g, '%28')
-    .replace(/\)/g, '%29')
-    .replace(/\*/g, '%2A');
+  return encodeURIComponent(str).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16));
 }
 
-// Função de resposta padrão
 const handleResponse = (data: any, status = 200) => {
   return new Response(JSON.stringify(data), {
     status,
@@ -37,19 +28,19 @@ const handleResponse = (data: any, status = 200) => {
   })
 }
 
+const ATTEMPT_FINISHED_THRESHOLD = 2.1;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Agora esperamos também o enrollmentId vindo do frontend
     const { learningUnitId, enrollmentId } = await req.json();
     if (!learningUnitId || !enrollmentId) {
       throw new Error('O ID da Unidade de Aprendizagem e o ID da Matrícula são obrigatórios.');
     }
 
-    // Cria o cliente Supabase autenticado
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -59,30 +50,63 @@ serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return handleResponse({ error: 'Usuário não autenticado' }, 401);
 
-    // Busca os dados do perfil, da UA e da disciplina
-    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
-    if (profileError || !profile) throw profileError || new Error('Perfil do usuário não encontrado.');
+    const { data: profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
+    if (!profile) throw new Error('Perfil do usuário não encontrado.');
 
-    const { data: learningUnit, error: unitError } = await supabase.from('learning_units').select('*, discipline:disciplines(*)').eq('id', learningUnitId).single();
-    if (unitError || !learningUnit) throw unitError || new Error('Unidade de Aprendizagem não encontrada.');
-    if (!learningUnit.sagah_content_id) return handleResponse({ error: 'Esta UA não possui um Content ID da Sagah.' }, 400);
+    const { data: learningUnit } = await supabase.from('learning_units').select('*, discipline:disciplines(*)').eq('id', learningUnitId).single();
+    if (!learningUnit) throw new Error('Unidade de Aprendizagem não encontrada.');
 
-    // Configurações LTI
+    // ===== NOVA LÓGICA INTELIGENTE DE TENTATIVAS =====
+    console.log('log: Verificando a última tentativa do aluno...');
+    const { data: latestGrade, error: gradeError } = await supabase
+      .from('student_grades')
+      .select('grade, attempts')
+      .eq('enrollment_id', enrollmentId)
+      .eq('learning_unit_id', learningUnitId)
+      .eq('student_id', profile.id)
+      .order('attempts', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (gradeError) throw gradeError;
+
+    let nextAttempt: number;
+    if (!latestGrade) {
+      // Nenhuma tentativa anterior, esta é a primeira.
+      nextAttempt = 1;
+      console.log('log: Nenhuma nota anterior encontrada. Iniciando tentativa 1.');
+    } else {
+      const currentAttempt = latestGrade.attempts ?? 1;
+      const currentGrade = latestGrade.grade ?? 0;
+
+      // Se a nota for maior que 2.1, a tentativa é considerada "finalizada".
+      // Então, a próxima ação é uma nova tentativa de recuperação.
+      if (currentGrade > ATTEMPT_FINISHED_THRESHOLD) {
+        nextAttempt = currentAttempt + 1;
+        console.log(`log: A última nota foi ${currentGrade} (> ${ATTEMPT_FINISHED_THRESHOLD}). Iniciando nova tentativa de recuperação: ${nextAttempt}.`);
+      } else {
+        // Se a nota for <= 2.1, o aluno está "Em Progresso".
+        // Ele deve continuar na mesma tentativa.
+        nextAttempt = currentAttempt;
+        console.log(`log: A última nota foi ${currentGrade} (<= ${ATTEMPT_FINISHED_THRESHOLD}). Continuando na mesma tentativa: ${nextAttempt}.`);
+      }
+    }
+    // ===================================================
+
     const sagahKey = Deno.env.get('SAGAH_LTI_KEY')!;
     const sagahSecret = Deno.env.get('SAGAH_LTI_SECRET')!;
     const baseUrl = "https://api.plataforma.grupoa.education/v2/safea-client/auth/launch/lti/ies/iteq_prod/application/gaia-lite";
     const finalLaunchUrl = `${baseUrl}?contentId=${learningUnit.sagah_content_id}`;
     
-    // Parâmetros para devolução de notas (Grade Passback)
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const outcomeServiceUrl = `${supabaseUrl}/functions/v1/grade-passback`;
-    const sourcedId = `${enrollmentId}::${learningUnit.id}::${profile.id}`; // Formato: enrollmentId::learningUnitId::studentId
+    const outcomeServiceUrl = `${Deno.env.get('SUPABASE_URL')!}/functions/v1/grade-passback`;
     
-    // Coleta de todos os parâmetros para a assinatura
+    const sourcedId = `${enrollmentId}::${learningUnit.id}::${profile.id}::${nextAttempt}`;
+    const resourceLinkId = `${profile.user_id}-${learningUnit.id}-${nextAttempt}`;
+    
     const params: Record<string, string> = {
       user_id: profile.user_id,
       roles: "urn:lti:role:ims/lis/Learner",
-      resource_link_id: `${profile.user_id}-${learningUnit.id}`,
+      resource_link_id: resourceLinkId,
       resource_link_title: learningUnit.name,
       lis_person_name_full: profile.full_name,
       lis_person_contact_email_primary: profile.email,
@@ -99,36 +123,25 @@ serve(async (req) => {
       oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
       oauth_signature_method: "HMAC-SHA1",
       contentId: learningUnit.sagah_content_id,
-
-      // Novos parâmetros para Grade Passback
       lis_outcome_service_url: outcomeServiceUrl,
       lis_result_sourcedid: sourcedId,
     };
 
-    // Lógica de assinatura manual
     const sortedKeys = Object.keys(params).sort();
     const normalizedParams = sortedKeys.map(key => `${rawurlencode(key)}=${rawurlencode(params[key])}`).join('&');
     const baseString = `POST&${rawurlencode(baseUrl)}&${rawurlencode(normalizedParams)}`;
     const signingKey = `${rawurlencode(sagahSecret)}&`;
-
     const encoder = new TextEncoder();
     const cryptoKey = await crypto.subtle.importKey("raw", encoder.encode(signingKey), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
     const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(baseString));
     const signature = bufferToBase64(signatureBuffer);
-
     params['oauth_signature'] = signature;
-    delete params['contentId']; // Remove o contentId do corpo do form, pois já vai na URL
+    delete params['contentId'];
     
-    console.log("🚀 Parâmetros de Lançamento LTI Gerados:");
-    console.log("URL de Retorno da Nota:", params.lis_outcome_service_url);
-    console.log("ID do Resultado:", params.lis_result_sourcedid);
+    console.log("log: 🚀 SourcedId gerado:", params.lis_result_sourcedid);
+    console.log("log: 🔗 Resource Link ID gerado:", params.resource_link_id);
 
-    const responsePayload = { 
-      launch_url: finalLaunchUrl,
-      params: params
-    };
-
-    return handleResponse(responsePayload);
+    return handleResponse({ launch_url: finalLaunchUrl, params });
 
   } catch (error) {
     console.error('log: 💥 ERRO GERAL NA FUNÇÃO generate-sagah-launch:', error);

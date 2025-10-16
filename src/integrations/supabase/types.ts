@@ -7,13 +7,12 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
+      // ... (outras tabelas como announcements, etc., permanecem iguais)
       announcements: {
         Row: {
           action_button_text: string | null
@@ -200,6 +199,66 @@ export type Database = {
         }
         Relationships: []
       }
+      combo_course_types: {
+        Row: {
+          combo_id: string
+          course_type_id: string
+        }
+        Insert: {
+          combo_id: string
+          course_type_id: string
+        }
+        Update: {
+          combo_id?: string
+          course_type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "combo_course_types_combo_id_fkey"
+            columns: ["combo_id"]
+            isOneToOne: false
+            referencedRelation: "combos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "combo_course_types_course_type_id_fkey"
+            columns: ["course_type_id"]
+            isOneToOne: false
+            referencedRelation: "course_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      combos: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          price: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contracts: {
         Row: {
           active: boolean
@@ -281,12 +340,13 @@ export type Database = {
         }
         Relationships: []
       }
+      
+      // LOG: ESTA É A CORREÇÃO PRINCIPAL
       courses: {
         Row: {
           active: boolean
           certifying_institution_id: string | null
           code: string | null
-          course_type: Database["public"]["Enums"]["course_type"]
           course_type_id: string | null
           created_at: string
           description: string | null
@@ -306,7 +366,6 @@ export type Database = {
           active?: boolean
           certifying_institution_id?: string | null
           code?: string | null
-          course_type: Database["public"]["Enums"]["course_type"]
           course_type_id?: string | null
           created_at?: string
           description?: string | null
@@ -326,7 +385,6 @@ export type Database = {
           active?: boolean
           certifying_institution_id?: string | null
           code?: string | null
-          course_type?: Database["public"]["Enums"]["course_type"]
           course_type_id?: string | null
           created_at?: string
           description?: string | null
@@ -359,6 +417,7 @@ export type Database = {
           },
         ]
       }
+      // ... (o resto das tabelas continua igual)
       documents: {
         Row: {
           created_at: string
@@ -419,7 +478,8 @@ export type Database = {
       enrollments: {
         Row: {
           actual_end_date: string | null
-          course_id: string
+          combo_id: string | null
+          course_id: string | null
           created_at: string
           enrollment_date: string | null
           enrollment_fee_status: Database["public"]["Enums"]["payment_status"]
@@ -434,7 +494,8 @@ export type Database = {
         }
         Insert: {
           actual_end_date?: string | null
-          course_id: string
+          combo_id?: string | null
+          course_id?: string | null
           created_at?: string
           enrollment_date?: string | null
           enrollment_fee_status?: Database["public"]["Enums"]["payment_status"]
@@ -449,7 +510,8 @@ export type Database = {
         }
         Update: {
           actual_end_date?: string | null
-          course_id?: string
+          combo_id?: string | null
+          course_id?: string | null
           created_at?: string
           enrollment_date?: string | null
           enrollment_fee_status?: Database["public"]["Enums"]["payment_status"]
@@ -463,6 +525,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "enrollments_combo_id_fkey"
+            columns: ["combo_id"]
+            isOneToOne: false
+            referencedRelation: "combos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "enrollments_course_id_fkey"
             columns: ["course_id"]
@@ -482,6 +551,42 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enrollment_selected_courses: {
+        Row: {
+          course_id: string
+          created_at: string
+          enrollment_id: string
+          id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          enrollment_id: string
+          id?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          enrollment_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrollment_selected_courses_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollment_selected_courses_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "enrollments"
             referencedColumns: ["id"]
           },
         ]
@@ -809,6 +914,7 @@ export type Database = {
     }
     Enums: {
       course_modality: "ead" | "presencial" | "hibrido"
+      // LOG: Esta definição foi re-adicionada para corrigir os erros.
       course_type: "graduacao" | "pos_graduacao" | "especializacao" | "extensao"
       enrollment_status:
         | "pendente"
@@ -825,6 +931,7 @@ export type Database = {
   }
 }
 
+// ... (o resto do arquivo que gera os tipos a partir de 'Database' permanece igual)
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
@@ -941,6 +1048,15 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+  
+export interface CourseType {
+  id: string
+  name: string
+  created_at?: string
+  updated_at?: string
+  required_documents: string[] | null // Adicione esta linha
+}
 
 export const Constants = {
   public: {
