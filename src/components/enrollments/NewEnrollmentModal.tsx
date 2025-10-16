@@ -1,5 +1,5 @@
-// LOG: Refatoração final para criar matrículas individuais a partir de um combo.
-import { useState, useEffect } from 'react';
+// LOG: Refatoração final para criar matrículas individuais a partir de um combo, com suporte a código de indicação.
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid'; // Importando a biblioteca para gerar UUIDs
+import { v4 as uuidv4 } from 'uuid';
 
 // Interfaces...
 interface Student { id: string; full_name: string; }
@@ -19,9 +19,11 @@ interface NewEnrollmentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEnrollmentCreated: () => void;
+  // NOVO: Propriedade para receber o código de indicação da URL.
+  initialReferralCode?: string | null; 
 }
 
-const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnrollmentModalProps) => {
+const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated, initialReferralCode }: NewEnrollmentModalProps) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
@@ -32,25 +34,31 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
   const [formData, setFormData] = useState({ student_id: '', selected_item_id: '' });
   const { toast } = useToast();
 
+  const fetchData = useCallback(async () => {
+    // Busca dados de forma otimizada
+    const { data: studentsData } = await supabase.from('profiles').select('id, full_name').eq('role', 'aluno');
+    setStudents(studentsData || []);
+    const { data: coursesData } = await supabase.from('courses').select('id, name, course_type_id');
+    setCourses(coursesData || []);
+    const { data: combosData } = await supabase.from('combos').select('id, name').eq('is_active', true);
+    setCombos(combosData || []);
+  }, []);
+
   useEffect(() => {
     if (open) {
-      const fetchData = async () => {
-        const { data: studentsData } = await supabase.from('profiles').select('id, full_name').eq('role', 'aluno');
-        setStudents(studentsData || []);
-        const { data: coursesData } = await supabase.from('courses').select('id, name, course_type_id');
-        setCourses(coursesData || []);
-        const { data: combosData } = await supabase.from('combos').select('id, name').eq('is_active', true);
-        setCombos(combosData || []);
-      };
       fetchData();
+      // LOG: Se houver um código de indicação na URL, ele será exibido aqui
+      if (initialReferralCode) {
+        console.log(`log: Modal aberto com Referral Code: ${initialReferralCode}`);
+      }
     } else {
-        // Limpa o estado quando o modal fecha
-        setFormData({ student_id: '', selected_item_id: ''});
-        setItemType('course');
-        setComboCourseTypes([]);
-        setSelectedComboCourses({});
+      // Limpa o estado quando o modal fecha
+      setFormData({ student_id: '', selected_item_id: ''});
+      setItemType('course');
+      setComboCourseTypes([]);
+      setSelectedComboCourses({});
     }
-  }, [open]);
+  }, [open, fetchData, initialReferralCode]);
 
   useEffect(() => {
     const fetchComboDetails = async () => {
@@ -87,18 +95,24 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
 
     try {
         if (itemType === 'course') {
-            // Lógica para curso individual (inalterada)
-            const { error } = await supabase.from('enrollments').insert({
+            // Lógica para curso individual
+            const enrollmentData = {
                 student_id: formData.student_id,
                 course_id: formData.selected_item_id,
                 status: 'pendente',
                 enrollment_fee_status: 'pendente',
                 enrollment_number: '',
                 enrollment_date: new Date().toISOString(),
-            });
+                // NOVO: Adiciona o código de indicação
+                referred_by_code: initialReferralCode || null,
+            };
+
+            console.log("log: Inserindo matrícula individual:", enrollmentData);
+            const { error } = await supabase.from('enrollments').insert(enrollmentData);
             if (error) throw error;
+
         } else {
-            // LOG: Nova lógica para combos
+            // Lógica para combos
             const allTypesSelected = comboCourseTypes.every(type => selectedComboCourses[type.id]);
             if (!allTypesSelected || comboCourseTypes.length === 0) {
                 toast({ title: "Erro", description: "Selecione um curso para cada tipo do combo.", variant: "destructive" });
@@ -106,20 +120,23 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
                 return;
             }
 
-            const package_id = uuidv4(); // Gera um ID único para este pacote de matrículas
+            const package_id = uuidv4(); 
             const selectedCourseIds = Object.values(selectedComboCourses);
 
             const enrollmentsToInsert = selectedCourseIds.map(courseId => ({
                 student_id: formData.student_id,
                 course_id: courseId,
-                combo_id: formData.selected_item_id, // Rastreia qual combo originou esta matrícula
-                package_id: package_id, // Agrupa todas estas matrículas
+                combo_id: formData.selected_item_id, 
+                package_id: package_id, 
                 status: 'pendente',
                 enrollment_fee_status: 'pendente',
                 enrollment_number: '',
                 enrollment_date: new Date().toISOString(),
+                // NOVO: Adiciona o código de indicação em cada matrícula do combo
+                referred_by_code: initialReferralCode || null, 
             }));
-            
+
+            console.log("log: Inserindo matrículas de combo (pacote):", enrollmentsToInsert);
             const { error } = await supabase.from('enrollments').insert(enrollmentsToInsert);
             if (error) throw error;
         }
@@ -129,6 +146,7 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
         onOpenChange(false);
 
     } catch (error: any) {
+        console.error('log: Erro detalhado na inserção da matrícula:', error);
         toast({ title: "Erro", description: `Falha ao criar matrícula: ${error.message}`, variant: "destructive" });
     } finally {
         setLoading(false);
@@ -137,13 +155,18 @@ const NewEnrollmentModal = ({ open, onOpenChange, onEnrollmentCreated }: NewEnro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* O JSX do formulário continua o mesmo */}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nova Matrícula</DialogTitle>
           <DialogDescription>Crie uma nova matrícula para um aluno.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} className="space-y-4">
+          {/* Alerta de Indicação, se o código estiver presente */}
+          {initialReferralCode && (
+              <div className="p-2 text-sm bg-blue-50 dark:bg-blue-900 rounded-md border border-blue-200">
+                  <span className="font-semibold">Indicação Detectada:</span> Código **{initialReferralCode}** será registrado.
+              </div>
+          )}
           <div className="space-y-2">
             <Label>Aluno</Label>
             <Select value={formData.student_id} onValueChange={(v) => setFormData(p => ({ ...p, student_id: v }))}>
