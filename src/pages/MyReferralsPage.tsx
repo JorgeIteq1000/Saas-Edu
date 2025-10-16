@@ -287,5 +287,4 @@ const MyReferralsPage = () => {
         </div>
     )
 };
-
 export default MyReferralsPage;
