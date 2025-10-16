@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, UserCheck, UserSearch } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
 
 // Schema de validação com Zod
 const saleSchema = z.object({
@@ -38,13 +39,6 @@ const saleSchema = z.object({
   courseId: z.string().optional(),
   comboId: z.string().optional(),
   coupon: z.string().optional(),
-}).refine(data => {
-    if (data.productType === 'course') return !!data.courseId;
-    if (data.productType === 'combo') return !!data.comboId;
-    return false;
-}, {
-    message: 'Selecione um curso ou combo.',
-    path: ['courseId'],
 });
 
 // Tipos
@@ -62,14 +56,17 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
   const [isSearchingCpf, setIsSearchingCpf] = useState(false);
   const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [studentFound, setStudentFound] = useState(false);
-
   const [courseTypes, setCourseTypes] = useState<CourseType[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
-  
-  const { toast } = useToast();
+  const [selectedProductPrice, setSelectedProductPrice] = useState<number | null>(null);
 
+  // Novos estados para a lógica de combo
+  const [comboCourseTypes, setComboCourseTypes] = useState<CourseType[]>([]);
+  const [selectedComboCourses, setSelectedComboCourses] = useState<Record<string, string>>({});
+
+  const { toast } = useToast();
   const form = useForm<z.infer<typeof saleSchema>>({
     resolver: zodResolver(saleSchema),
     defaultValues: { productType: 'course' },
@@ -77,6 +74,8 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
 
   const productType = form.watch('productType');
   const selectedCourseType = form.watch('courseTypeId');
+  const selectedCourseId = form.watch('courseId');
+  const selectedComboId = form.watch('comboId');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -85,15 +84,23 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
         const { data: courseTypesData } = await supabase.from('course_types').select('id, name');
         setCourseTypes(courseTypesData || []);
 
-        const { data: coursesData, error: coursesError } = await supabase.from('courses').select('id, name, course_type_id, price');
+        const { data: coursesRawData, error: coursesError } = await supabase
+          .from('courses')
+          .select('id, name, course_type_id, monthly_fee, max_installments');
         if (coursesError) throw coursesError;
-        setCourses(coursesData || []);
+
+        const coursesWithPrice = coursesRawData.map(course => ({
+            ...course,
+            price: (Number(course.monthly_fee) || 0) * (course.max_installments || 1)
+        }));
+        setCourses(coursesWithPrice || []);
         
-        const { data: combosData } = await supabase.from('combos').select('id, name, price');
+        const { data: combosData, error: combosError } = await supabase.from('combos').select('id, name, price');
+        if (combosError) throw combosError;
         setCombos(combosData || []);
       } catch (error: any) {
         console.error('log: 💥 Erro ao buscar dados para o modal:', error);
-        toast({ title: 'Erro de Permissão', description: 'Verifique as permissões (RLS) para ler os cursos e combos. Detalhes no console.', variant: 'destructive' });
+        toast({ title: 'Erro de Permissão', description: 'Verifique as permissões (RLS) para ler os cursos e combos.', variant: 'destructive' });
       }
     };
     if (open) {
@@ -110,27 +117,55 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
     form.setValue('courseId', undefined);
   }, [selectedCourseType, courses, form]);
 
+  useEffect(() => {
+    const fetchComboDetails = async () => {
+      if (productType === 'combo' && selectedComboId) {
+        console.log(`log: Buscando detalhes para o combo ID: ${selectedComboId}`);
+        const { data, error } = await supabase
+          .from('combo_course_types')
+          .select('course_types(id, name)')
+          .eq('combo_id', selectedComboId);
+
+        if (error) {
+          toast({ title: 'Erro', description: 'Não foi possível buscar os tipos de curso do combo.', variant: 'destructive' });
+          setComboCourseTypes([]);
+        } else {
+          const types = data.map((item: any) => item.course_types).filter(Boolean);
+          setComboCourseTypes(types as CourseType[]);
+          console.log('log: Tipos de curso encontrados para o combo:', types);
+        }
+      } else {
+        setComboCourseTypes([]);
+      }
+      setSelectedComboCourses({});
+    };
+    fetchComboDetails();
+  }, [productType, selectedComboId, toast]);
+
+  useEffect(() => {
+    let price: number | null = null;
+    if (productType === 'course' && selectedCourseId) {
+        const selectedCourse = courses.find(c => c.id === selectedCourseId);
+        price = selectedCourse?.price ?? null;
+    } else if (productType === 'combo' && selectedComboId) {
+        const selectedCombo = combos.find(c => c.id === selectedComboId);
+        price = Number(selectedCombo?.price) ?? null;
+    }
+    setSelectedProductPrice(price);
+  }, [productType, selectedCourseId, selectedComboId, courses, combos]);
+
   const handleCpfBlur = async () => {
-    const cpf = form.getValues('documentNumber').replace(/\D/g, '');
+    const cpf = form.getValues('documentNumber')?.replace(/\D/g, '') || '';
     if (cpf.length !== 11) {
       setStudentFound(false);
       return;
     }
-    
     setIsSearchingCpf(true);
     setStudentFound(false);
-    console.log(`log: Buscando aluno com CPF: ${cpf}`);
     try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('document_number', cpf)
-        .single();
-      
+      const { data: profile, error } = await supabase.from('profiles').select('*').eq('document_number', cpf).single();
       if (error && error.code !== 'PGRST116') throw error;
-
       if (profile) {
-        console.log('log: ✅ Aluno encontrado:', profile.full_name);
         setStudentFound(true);
         toast({ title: 'Aluno Encontrado!', description: `Dados de ${profile.full_name} foram preenchidos.` });
         form.setValue('fullName', profile.full_name);
@@ -143,8 +178,6 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
         form.setValue('addressNeighborhood', profile.address_neighborhood);
         form.setValue('addressCity', profile.address_city);
         form.setValue('addressState', profile.address_state);
-      } else {
-        console.log('log: Aluno não encontrado. Formulário liberado para novo cadastro.');
       }
     } catch (error: any) {
       toast({ title: 'Erro', description: 'Não foi possível buscar o CPF.', variant: 'destructive' });
@@ -154,25 +187,24 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
   };
 
   const handleCepBlur = async () => {
-    const cep = form.getValues('zipCode').replace(/\D/g, '');
+    const cep = form.getValues('zipCode')?.replace(/\D/g, '') || '';
     if (cep.length !== 8) return;
-
     setIsSearchingCep(true);
-    console.log(`log: Buscando endereço para o CEP: ${cep}`);
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await response.json();
+      const { data, error } = await supabase.functions.invoke('fetch-cep', {
+        body: { cep },
+      });
+      if (error) throw error;
       if (!data.erro) {
         form.setValue('addressStreet', data.logradouro);
         form.setValue('addressNeighborhood', data.bairro);
         form.setValue('addressCity', data.localidade);
         form.setValue('addressState', data.uf);
-        console.log('log: ✅ Endereço encontrado e preenchido.');
       } else {
         toast({ title: 'CEP não encontrado', variant: 'destructive' });
       }
-    } catch (error) {
-      toast({ title: 'Erro ao buscar CEP', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao buscar CEP', description: error.message, variant: 'destructive' });
     } finally {
       setIsSearchingCep(false);
     }
@@ -180,7 +212,26 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
 
   const onSubmit = async (values: z.infer<typeof saleSchema>) => {
     setIsSubmitting(true);
-    console.log('log: Submetendo formulário de nova matrícula...', values);
+    console.log('log: Submetendo formulário...', values);
+    
+    const salePayload: any = {
+      productType: values.productType,
+      coupon: values.coupon,
+    };
+
+    if (values.productType === 'course') {
+      salePayload.course_id = values.courseId;
+    } else if (values.productType === 'combo') {
+      const allTypesSelected = comboCourseTypes.every(type => selectedComboCourses[type.id]);
+      if (!allTypesSelected || comboCourseTypes.length === 0) {
+        toast({ title: "Campos Faltando", description: "Por favor, selecione um curso para cada tipo do combo.", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+      }
+      salePayload.combo_id = values.comboId;
+      salePayload.selected_course_ids = Object.values(selectedComboCourses);
+    }
+
     try {
         const { data, error } = await supabase.functions.invoke('create-sale-enrollment', {
             body: {
@@ -197,11 +248,7 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
                     address_city: values.addressCity,
                     address_state: values.addressState,
                 },
-                saleData: {
-                    course_id: productType === 'course' ? values.courseId : null,
-                    combo_id: productType === 'combo' ? values.comboId : null,
-                    coupon: values.coupon,
-                }
+                saleData: salePayload
             }
         });
 
@@ -212,6 +259,8 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
         setOpen(false);
         form.reset({ productType: 'course' });
         setStudentFound(false);
+        setSelectedComboCourses({});
+        setComboCourseTypes([]);
 
     } catch (error: any) {
         console.error('log: 💥 Erro ao chamar a Edge Function:', error);
@@ -223,9 +272,7 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
   
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {triggerButton}
-      </DialogTrigger>
+      <DialogTrigger asChild>{triggerButton}</DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Registrar Nova Matrícula</DialogTitle>
@@ -242,7 +289,7 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
                     <FormLabel>CPF</FormLabel>
                     <FormControl>
                         <div className="relative">
-                            <InputMask mask="999.999.999-99" value={field.value} onChange={field.onChange} onBlur={handleCpfBlur}>
+                            <InputMask mask="999.999.999-99" value={field.value || ''} onChange={field.onChange} onBlur={handleCpfBlur}>
                                 {(inputProps: any) => <Input {...inputProps} placeholder="Digite o CPF para buscar..." />}
                             </InputMask>
                             <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -262,8 +309,7 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
                 <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem><FormLabel>Telefone</FormLabel>
                     <FormControl>
-                      {/* CORREÇÃO APLICADA: 'disabled' foi movido para o componente InputMask */}
-                      <InputMask mask="(99) 99999-9999" value={field.value} onChange={field.onChange} disabled={studentFound}>
+                      <InputMask mask="(99) 99999-9999" value={field.value || ''} onChange={field.onChange} disabled={studentFound}>
                         {(inputProps: any) => <Input {...inputProps} />}
                       </InputMask>
                     </FormControl>
@@ -284,8 +330,7 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
                     <FormLabel>CEP</FormLabel>
                     <FormControl>
                         <div className="relative">
-                            {/* CORREÇÃO APLICADA: 'disabled' foi movido para o componente InputMask */}
-                            <InputMask mask="99999-999" value={field.value} onChange={field.onChange} onBlur={handleCepBlur} disabled={studentFound}>
+                            <InputMask mask="99999-999" value={field.value || ''} onChange={field.onChange} onBlur={handleCepBlur} disabled={studentFound}>
                                 {(inputProps: any) => <Input {...inputProps} />}
                             </InputMask>
                             {isSearchingCep && <Loader2 className="absolute inset-y-0 right-0 flex items-center pr-3 h-4 w-4 animate-spin" />}
@@ -350,16 +395,49 @@ const NewSaleModal = ({ onSaleCreated, triggerButton }: NewSaleModalProps) => {
                 )}
 
                 {productType === 'combo' && (
-                    <FormField control={form.control} name="comboId" render={({ field }) => (
-                        <FormItem><FormLabel>Combo</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione o combo..." /></SelectTrigger></FormControl>
-                                <SelectContent>{combos.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
+                    <div className="space-y-4">
+                        <FormField control={form.control} name="comboId" render={({ field }) => (
+                            <FormItem><FormLabel>Combo</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value || ''}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione o combo..." /></SelectTrigger></FormControl>
+                                    <SelectContent>{combos.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </FormItem>
+                        )} />
+
+                        {comboCourseTypes.length > 0 && (
+                            <div className="p-4 border rounded-md space-y-4 bg-muted/50">
+                                <h4 className="font-medium text-center">Selecione os Cursos do Combo</h4>
+                                {comboCourseTypes.map(type => (
+                                    <div key={type.id} className="space-y-2">
+                                    <Label>{type.name}</Label>
+                                    <Select
+                                        value={selectedComboCourses[type.id] || ''}
+                                        onValueChange={courseId => setSelectedComboCourses(prev => ({...prev, [type.id]: courseId}))}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder={`Selecione um curso de ${type.name}`} /></SelectTrigger>
+                                        <SelectContent>
+                                        {courses.filter(c => c.course_type_id === type.id).map(course => (
+                                            <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                                        ))}
+                                        </SelectContent>
+                                    </Select>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
+
+                {selectedProductPrice !== null && (
+                    <div className="mt-4 p-3 bg-muted rounded-md text-center">
+                        <span className="text-sm text-muted-foreground">Valor Total do Produto</span>
+                        <p className="text-2xl font-bold">
+                            {selectedProductPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                    </div>
+                )}
+                
                 <FormField control={form.control} name="coupon" render={({ field }) => (
                   <FormItem className="mt-4"><FormLabel>Cupom de Desconto (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
