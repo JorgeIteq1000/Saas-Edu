@@ -1,6 +1,6 @@
 // src/pages/MySalesPage.tsx
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,12 +10,14 @@ import { TrendingUp, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
-// Tipagem atualizada para refletir a busca na tabela 'enrollments'
+// Tipagem atualizada para refletir a busca na tabela 'enrollments' e incluir IDs de combo/pacote
 interface ClosedSale {
   id: string;
-  status: string; // Agora é enrollment_status (ativa, pendente, etc.)
+  status: string; // enrollment_status (ativa, pendente, etc.)
   created_at: string;
-  value: number | null; // Mantido para compatibilidade, será sempre null nesta query
+  combo_id: string | null; // Adicionado
+  package_id: string | null; // Adicionado
+  value: number | null; // Mantido
   student: {
     full_name: string;
     document_number: string | null;
@@ -23,7 +25,6 @@ interface ClosedSale {
   course: {
     name: string;
   } | null;
-  // Adiciona a informação do vendedor, necessária para a depuração, mas não usada na tabela
   seller: { 
     full_name: string 
   } | null; 
@@ -55,14 +56,31 @@ const getStatusColor = (status: string): "secondary" | "default" | "destructive"
         trancada: 'outline',
         cancelada: 'destructive',
         
-        // Pipeline statuses for sales that are not enrollments yet (if we merge logic later)
         lead: 'secondary', 
         proposta: 'outline',
         fechada: 'default',
         perdida: 'destructive'
     };
-    // Prioriza o status de matrícula, mas garante um fallback
     return colors[status.toLowerCase()] || 'default';
+};
+
+// Lógica para contar matrículas únicas (combos contam como 1)
+const getUniqueEnrollments = (allEnrollments: ClosedSale[]): ClosedSale[] => {
+    const uniqueRevenueEvents = new Map<string, ClosedSale>();
+
+    for (const enrollment of allEnrollments) {
+        // O identificador único de receita é o package_id (para combos) ou o enrollment.id (para cursos individuais)
+        // package_id é usado quando combo_id está presente, caso contrário, usa o id da matrícula.
+        const uniqueId = enrollment.combo_id && enrollment.package_id ? enrollment.package_id : enrollment.id;
+
+        // Se o ID de evento único ainda não foi visto, armazena essa linha.
+        if (!uniqueRevenueEvents.has(uniqueId)) {
+            uniqueRevenueEvents.set(uniqueId, enrollment);
+        }
+    }
+    
+    // Retorna a lista de eventos de receita únicos
+    return Array.from(uniqueRevenueEvents.values());
 };
 
 
@@ -75,7 +93,7 @@ const MySalesPage = () => {
 
     console.log("log: MySalesPage component renderizando..."); 
 
-    const fetchSales = async () => {
+    const fetchSales = useCallback(async () => {
         console.log('log: Iniciando busca de Minhas Vendas...');
         if (!hasPermission('sales', 'view')) {
             console.log('log: Usuário sem permissão para visualizar vendas.');
@@ -93,7 +111,7 @@ const MySalesPage = () => {
 
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
-                .select('id, role, team_id') // Obtemos o ID, role e team_id (necessário para gestores)
+                .select('id, role, team_id')
                 .eq('user_id', user.id)
                 .single();
 
@@ -107,13 +125,13 @@ const MySalesPage = () => {
             // Monta a query base. AGORA USAMOS A TABELA 'enrollments'
             let query = supabase
                 .from('enrollments')
-                // 💥 AJUSTE NA QUERY: removemos o alias complexo 'seller:profiles!...'
-                // e usamos a sintaxe padrão. A query de enrollment_fee foi omitida
-                // pois não há coluna para ela aqui.
+                // 💥 SELECT ATUALIZADO para incluir combo_id e package_id
                 .select(`
                     id,
                     status,
                     created_at,
+                    combo_id, 
+                    package_id,
                     student:profiles!enrollments_student_id_fkey(full_name, document_number),
                     course:courses(name),
                     seller:profiles!enrollments_seller_id_fkey(full_name)
@@ -122,12 +140,10 @@ const MySalesPage = () => {
 
             // 2. Aplicar filtro com base na função do usuário
             if (profile.role === 'vendedor') {
-                // Vendedor: Vê apenas as suas vendas (seller_id = seu profile.id)
                 console.log('log: Aplicando filtro: Vendedor (apenas vendas próprias).');
                 query = query.eq('seller_id', profile.id);
 
             } else if (profile.role === 'gestor') {
-                // Gestor: Vê as vendas de todos do seu time
                 if (profile.team_id) {
                     console.log(`log: Aplicando filtro: Gestor (vendas do time: ${profile.team_id}).`);
                     const { data: teamProfiles, error: teamError } = await supabase
@@ -150,11 +166,8 @@ const MySalesPage = () => {
                     query = query.eq('seller_id', profile.id);
                 }
             } else if (profile.role === 'admin_geral') {
-                 // Admin Geral: Vê todas as vendas (sem filtro de seller_id)
                  console.log('log: Aplicando filtro: Admin Geral (todas as vendas).');
-                 // Não aplica filtro para admin_geral
             } else {
-                // Outras roles não devem ver vendas
                 query = query.eq('seller_id', 'invalid_id_to_return_no_sales');
                 console.log(`log: Role ${profile.role}. Aplicando filtro: Nenhuma venda.`);
             }
@@ -164,14 +177,12 @@ const MySalesPage = () => {
             
             if (error) throw error;
             
-            // Mapeamos os resultados para a interface de ClosedSale, adicionando 'value: null'
-            // O mapeamento é necessário para compatibilizar a tipagem ClosedSale com os dados de enrollment
             const mappedSales: ClosedSale[] = (data as any[]).map(item => ({
                 ...item,
-                value: null, // Mantido como null, pois não é a tabela 'sales'
+                value: null, 
             }));
 
-            console.log(`log: 🎉 Vendas (Matrículas) carregadas: ${mappedSales.length}`);
+            console.log(`log: 🎉 Matrículas brutas carregadas (incluindo duplicatas de combo): ${mappedSales.length}`);
             setSales(mappedSales);
 
         } catch (error) {
@@ -184,16 +195,23 @@ const MySalesPage = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [hasPermission, toast]);
 
     useEffect(() => {
         if (!permissionsLoading) {
             fetchSales();
         }
-    }, [permissionsLoading]); 
+    }, [permissionsLoading, fetchSales]); 
 
-    // Lógica de filtro local por termo de busca
-    const filteredSales = sales.filter(sale => {
+    // ----------------------------------------------------
+    // LÓGICA DE CONTABILIZAÇÃO E FILTRAGEM
+    // ----------------------------------------------------
+
+    // 1. Matrículas únicas para contagem (Combos contam como 1)
+    const uniqueSales = getUniqueEnrollments(sales);
+    
+    // 2. Filtro de pesquisa aplicado às matrículas únicas
+    const filteredSales = uniqueSales.filter(sale => {
         const studentName = sale.student?.full_name?.toLowerCase() || '';
         const studentCpf = sale.student?.document_number?.toLowerCase() || '';
         const courseName = sale.course?.name?.toLowerCase() || '';
@@ -202,8 +220,12 @@ const MySalesPage = () => {
         return studentName.includes(term) || studentCpf.includes(term) || courseName.includes(term);
     });
 
-    // Como estamos buscando em enrollments, o 'value' será sempre 0,
-    const totalValue = 0; 
+    // 3. Cálculos para os Cards
+    const totalEnrollmentsCount = uniqueSales.length;
+    const activeEnrollmentsCount = uniqueSales.filter(s => s.status === 'ativa').length;
+    const totalValue = 0; // Mantido em 0, pois o valor real não está na tabela enrollments
+
+    // ... (o resto do componente) ...
 
     if (permissionsLoading) {
         return <div className="p-6 text-center">Carregando permissões...</div>;
@@ -225,9 +247,6 @@ const MySalesPage = () => {
         );
     }
     
-    // Contagem de status baseada na coluna 'status' da tabela enrollments (ativa, pendente, etc.)
-    const activeEnrollmentsCount = sales.filter(s => s.status === 'ativa').length;
-
 
     return (
         <div className="p-6 space-y-6">
@@ -240,7 +259,8 @@ const MySalesPage = () => {
                         <CardTitle className="text-sm font-medium">Total de Matrículas</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{sales.length}</div>
+                        <div className="text-2xl font-bold">{totalEnrollmentsCount}</div>
+                        <p className="text-xs text-muted-foreground">Combos contam como uma única matrícula.</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -258,7 +278,6 @@ const MySalesPage = () => {
                         <CardTitle className="text-sm font-medium">Valor Total Estimado</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {/* Se necessário, este campo pode ser removido ou atualizado para calcular o valor real */}
                         <div className="text-2xl font-bold">R$ 0,00</div>
                     </CardContent>
                 </Card>
@@ -306,13 +325,15 @@ const MySalesPage = () => {
                                         <TableHead>Cliente</TableHead>
                                         <TableHead>CPF</TableHead>
                                         <TableHead>Curso</TableHead>
-                                        <TableHead>Vendedor</TableHead> {/* Adicionamos o vendedor aqui */}
+                                        <TableHead>Vendedor</TableHead>
                                         <TableHead>Status</TableHead>
+                                        <TableHead>Tipo</TableHead> {/* Novo campo para indicar se é Combo ou Individual */}
                                         <TableHead>Data Matrícula</TableHead>
                                         <TableHead>Ações</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
+                                    {/* Agora iteramos sobre filteredSales (matrículas únicas) */}
                                     {filteredSales.map((sale) => (
                                         <TableRow key={sale.id}>
                                             <TableCell className="font-medium">
@@ -322,15 +343,22 @@ const MySalesPage = () => {
                                                 {sale.student?.document_number || 'CPF Pendente'}
                                             </TableCell>
                                             <TableCell>
-                                                <p className="font-medium">{sale.course?.name || 'Curso Não Definido'}</p>
+                                                <p className="font-medium">
+                                                    {/* Mostra o nome do curso (ou nome do combo se for a primeira linha do pacote) */}
+                                                    {sale.combo_id ? `Combo (Pacote: ${sale.package_id?.substring(0, 8)}...)` : sale.course?.name || 'Curso Não Definido'}
+                                                </p>
                                             </TableCell>
-                                            {/* Exibe o nome do vendedor/aqui, garantindo que seja um campo disponível no .select() */}
                                             <TableCell className="text-sm text-muted-foreground"> 
                                                 {sale.seller?.full_name || 'Vendedor Desconhecido'}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge variant={getStatusColor(sale.status)}>
                                                     {getStatusLabel(sale.status)}
+                                                </Badge>
+                                            </TableCell>
+                                             <TableCell>
+                                                <Badge variant="outline">
+                                                    {sale.combo_id ? 'Combo' : 'Individual'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
